@@ -61,25 +61,6 @@ Index: CMakeLists.txt
  message (STATUS "")
 Index: config.h
 ===================================================================
---- config.h	(revision 9942)
-+++ config.h	(working copy)
-@@ -1,6 +1,7 @@
- #ifndef CONFIG_H_
- #define CONFIG_H_
- 
-+#define WITH_EMU 1
- #define WEBIF 1
- #define WEBIF_LIVELOG 1
- #define WEBIF_JQUERY 1
-@@ -83,6 +84,8 @@
- #define CARDREADER_STAPI 1
- #endif
- 
-+//#define HAVE_EXECINFO_H 1
-+
- #endif // WITH_CARDREADER
- 
- #endif //OSCAM_CONFIG_H_
 Index: config.sh
 ===================================================================
 --- config.sh	(revision 9942)
@@ -327,62 +308,6 @@ Index: Makefile
  SRC-$(CONFIG_WITH_AZBOX) += module-dvbapi-azbox.c
 Index: module-dvbapi.c
 ===================================================================
---- module-dvbapi.c	(revision 9942)
-+++ module-dvbapi.c	(working copy)
-@@ -20,6 +20,7 @@
- #include "oscam-string.h"
- #include "oscam-time.h"
- #include "reader-irdeto.h"
-+#include "readers.h"
- 
- #ifdef DVBAPI_SAMYGO
- 
-@@ -965,6 +966,7 @@
- int32_t dvbapi_start_emm_filter(int32_t demux_index)
- {
- 	unsigned int j, fcount = 0, fcount_added = 0;
-+	unsigned int u;
- 	const char *typtext[] = { "UNIQUE", "SHARED", "GLOBAL", "UNKNOWN" };
- 
- 	if(!demux[demux_index].EMMpidcount)
-@@ -994,6 +996,11 @@
- 		caid = ncaid = rdr->caid;
- 
- 		struct s_cardsystem *cs;
-+#ifdef WITH_EMU
-+		if(rdr->typ == R_EMU)
-+			{ cs = &rdr->csystem; }
-+		else
-+#endif
- 		if(!rdr->caid)
- 			{ cs = get_cardsystem_by_caid(rdr->csystem.caids[0]); } //Bulcrypt
- 		else
-@@ -1049,8 +1056,24 @@
- 			else
- 			{
- 				// provid 0 is safe since oscam sets filter with e.g. rdr->sa & doesn't add filter twice (is_emmfilter_in_list)
--				if(!rdr->caid)
-+				if(rdr->typ == R_EMU) 
- 				{
-+					for(l=-1, u=0; l<0 && u<8 && rdr->csystem.caids[u]!=0; u++) 
-+					{
-+						if(rdr->auprovid)
-+						{
-+							l = dvbapi_find_emmpid(demux_index, emmtype, rdr->csystem.caids[u], rdr->auprovid);
-+							if(l < 0)
-+								{ l = dvbapi_find_emmpid(demux_index, emmtype, rdr->csystem.caids[u], 0); }
-+						}
-+						else
-+						{
-+							l = dvbapi_find_emmpid(demux_index, emmtype, rdr->csystem.caids[u], 0);
-+						}
-+					}					
-+				}
-+				else if(!rdr->caid)
-+				{
- 					l = dvbapi_find_emmpid(demux_index, emmtype, rdr->csystem.caids[0], 0); //Bulcrypt
- 					if(l < 0)
- 						{ l = dvbapi_find_emmpid(demux_index, emmtype, rdr->csystem.caids[1], 0); }
 Index: module-emulator.c
 ===================================================================
 --- module-emulator.c	(revision 0)
@@ -3154,26 +3079,6 @@ Index: module-emulator.c
 +}
 Index: module-stat.c
 ===================================================================
---- module-stat.c	(revision 9942)
-+++ module-stat.c	(working copy)
-@@ -826,7 +826,7 @@
- 
- uint16_t get_rdr_caid(struct s_reader *rdr)
- {
--	if(is_network_reader(rdr))
-+	if(is_network_reader(rdr) || rdr->typ == R_EMU)
- 	{
- 		return 0; //reader caid is not real caid
- 	}
-@@ -1224,7 +1224,7 @@
- 		for(ea = er->matching_rdr; ea; ea = ea->next)
- 		{
- 			rdr = ea->reader;
--			if(is_network_reader(rdr))    //reader caid is not real caid
-+			if(is_network_reader(rdr) || rdr->typ == R_EMU)    //reader caid is not real caid
- 			{
- 				prv = ea;
- 				continue; // proxy can convert or reject
 Index: module-webif-tpl.c
 ===================================================================
 --- module-webif-tpl.c	(revision 9942)
@@ -3188,100 +3093,6 @@ Index: module-webif-tpl.c
  										{
 Index: module-webif.c
 ===================================================================
---- module-webif.c	(revision 9942)
-+++ module-webif.c	(working copy)
-@@ -105,7 +105,8 @@
- #define MNU_CFG_WHITELIST 25
- #define MNU_CFG_RATELIMIT 26
- #define MNU_CFG_FCSS 27
--#define MNU_CFG_TOTAL_ITEMS 28 // sum of items above. Use it for "All inactive" in function calls too.
-+#define MNU_CFG_KEY 28
-+#define MNU_CFG_TOTAL_ITEMS 29 // sum of items above. Use it for "All inactive" in function calls too.
- 
- static void set_status_info_var(struct templatevars *vars, char *varname, int no_data, char *fmt, double value) {
- 	if (no_data)
-@@ -1716,7 +1717,7 @@
- 		chk_reader("services", servicelabels, rdr);
- 		chk_reader("lb_whitelist_services", servicelabelslb, rdr);
- 
--		if(is_network_reader(rdr))    //physical readers make trouble if re-started
-+		if(is_network_reader(rdr) || rdr->typ == R_EMU)    //physical readers make trouble if re-started
- 		{
- 			restart_cardreader(rdr, 1);
- 		}
-@@ -2275,6 +2276,9 @@
- 	case R_PCSC :
- 		tpl_addVar(vars, TPLAPPEND, "READERDEPENDINGCONFIG", tpl_getTpl(vars, "READERCONFIGSTDHWREADERBIT"));
- 		break;
-+	case R_EMU:		
-+		tpl_addVar(vars, TPLAPPEND, "READERDEPENDINGCONFIG", "");
-+		break;
- 	case R_CAMD35 :
- 		tpl_addVar(vars, TPLAPPEND, "READERDEPENDINGCONFIG", tpl_getTpl(vars, "READERCONFIGCAMD35BIT"));
- 		break;
-@@ -3855,9 +3859,31 @@
- 
- 					tpl_addVar(vars, TPLAPPEND, "LOGHISTORY", "<BR><BR>New Structure:<BR>");
- 					char tbuffer[83];
-+#ifdef WITH_EMU					
-+					char keyBuffer[1024];
-+#endif
- 					while((item = ll_iter_next(&itr)))
- 					{
-+#ifdef WITH_EMU						
-+						if(item->isKey) {
-+							tpl_addVar(vars, TPLADD, "ENTSTARTDATE", "");
-+							tpl_addVar(vars, TPLADD, "ENTENDDATE", "");
-+							cs_hexdump(0, item->key, item->keyLength, keyBuffer, sizeof(keyBuffer));
-+							tpl_addVar(vars, TPLADD, "ENTEXPIERED", "e_valid");
-+							tpl_printf(vars, TPLADD, "ENTCAID", "%04X", item->caid);
-+							tpl_printf(vars, TPLADD, "ENTPROVID", "%06X", item->provid);
-+							tpl_addVar(vars, TPLADD, "ENTID", item->name);
-+							tpl_addVar(vars, TPLADD, "ENTCLASS", keyBuffer);
-+							if(item->isData) { tpl_addVar(vars, TPLADD, "ENTTYPE", "data"); }
-+							else { tpl_addVar(vars, TPLADD, "ENTTYPE", "key"); }
-+							tpl_addVar(vars, TPLADD, "ENTRESNAME", "");
- 
-+							if((strcmp(getParam(params, "hideexpired"), "1") != 0) || (item->end > now))
-+								{ tpl_addVar(vars, TPLAPPEND, "READERENTENTRY", tpl_getTpl(vars, "ENTITLEMENTITEMBIT")); }							
-+						
-+							continue;	
-+						}
-+#endif											
- 						localtime_r(&item->start, &start_t);
- 						localtime_r(&item->end, &end_t);
- 
-@@ -4292,6 +4318,9 @@
- #else
- 						filtered = (type == cl->typ);
- #endif
-+#ifdef WITH_EMU
-+                        if(type == 'e' && cl->typ == 'r' && cl->reader->typ == R_EMU) filtered = 1;
-+#endif
- 					}
- 				}
- 
-@@ -5600,6 +5629,9 @@
- 		{ "oscam.conf",      MNU_CFG_FCONF,     FTYPE_CONFIG },
- 		{ "oscam.user",      MNU_CFG_FUSER,     FTYPE_CONFIG },
- 		{ "oscam.server",    MNU_CFG_FSERVER,   FTYPE_CONFIG },
-+#ifdef WITH_EMU
-+		{ "SoftCam.Key",     MNU_CFG_KEY,       FTYPE_CONFIG },
-+#endif
- 		{ "oscam.services",  MNU_CFG_FSERVICES, FTYPE_CONFIG },
- 		{ "oscam.whitelist", MNU_CFG_WHITELIST, FTYPE_CONFIG },
- 		{ "oscam.srvid",     MNU_CFG_FSRVID,    FTYPE_CONFIG },
-@@ -6947,8 +6979,8 @@
- 		memcpy(*result + bufsize, buf2, n);
- 		bufsize += n;
- 
--		//max request size 100kb
--		if(bufsize > 102400)
-+		//max request size 200kb
-+		if(bufsize > 204800)
- 		{
- 			cs_log("error: too much data received from %s", cs_inet_ntoa(in));
- 			NULLFREE(*result);
 Index: oscam-chk.c
 ===================================================================
 --- oscam-chk.c	(revision 9942)
@@ -3662,3 +3473,192 @@ Index: webif/pages_index.txt
  
  AUTOCONF                      ghttp/autoconf.html                                         MODULE_GHTTP
  PREAUTOCONF                   ghttp/pre_autoconf.html                                     MODULE_GHTTP
+--- config.h	2014-11-03 15:05:37.000000000 +0100
++++ config.h.mod.h	2014-11-03 15:06:03.000000000 +0100
+@@ -1,6 +1,7 @@
+ #ifndef CONFIG_H_
+ #define CONFIG_H_
+ 
++#define WITH_EMU 1
+ #define WEBIF 1
+ #define WEBIF_LIVELOG 1
+ #define WEBIF_JQUERY 1
+@@ -83,6 +84,8 @@
+ //#define CARDREADER_STAPI 1
+ #endif
+ 
++//#define HAVE_EXECINFO_H 1
++
+ #endif // WITH_CARDREADER
+ 
+ #endif //OSCAM_CONFIG_H_
+--- module-dvbapi.c	2014-11-03 15:13:31.000000000 +0100
++++ module-dvbapi.c.mod.c	2014-11-03 15:15:23.000000000 +0100
+@@ -20,6 +20,7 @@
+ #include "oscam-string.h"
+ #include "oscam-time.h"
+ #include "reader-irdeto.h"
++#include "readers.h"
+ 
+ #ifdef DVBAPI_SAMYGO
+ 
+@@ -961,6 +962,7 @@
+ int32_t dvbapi_start_emm_filter(int32_t demux_index)
+ {
+ 	unsigned int j, fcount = 0, fcount_added = 0;
++	unsigned int u;
+ 	const char *typtext[] = { "UNIQUE", "SHARED", "GLOBAL", "UNKNOWN" };
+ 
+ 	if(!demux[demux_index].EMMpidcount)
+@@ -990,6 +992,11 @@
+ 		caid = ncaid = rdr->caid;
+ 
+ 		struct s_cardsystem *cs;
++#ifdef WITH_EMU
++		if(rdr->typ == R_EMU)
++			{ cs = &rdr->csystem; }
++		else
++#endif
+ 		if(!rdr->caid)
+ 			{ cs = get_cardsystem_by_caid(rdr->csystem.caids[0]); } //Bulcrypt
+ 		else
+@@ -1045,7 +1052,23 @@
+ 			else
+ 			{
+ 				// provid 0 is safe since oscam sets filter with e.g. rdr->sa & doesn't add filter twice (is_emmfilter_in_list)
+-				if(!rdr->caid)
++				if(rdr->typ == R_EMU) 
++				{
++					for(l=-1, u=0; l<0 && u<8 && rdr->csystem.caids[u]!=0; u++) 
++					{
++						if(rdr->auprovid)
++						{
++							l = dvbapi_find_emmpid(demux_index, emmtype, rdr->csystem.caids[u], rdr->auprovid);
++							if(l < 0)
++								{ l = dvbapi_find_emmpid(demux_index, emmtype, rdr->csystem.caids[u], 0); }
++						}
++						else
++						{
++							l = dvbapi_find_emmpid(demux_index, emmtype, rdr->csystem.caids[u], 0);
++						}
++					}					
++				}
++				else if(!rdr->caid)
+ 				{
+ 					l = dvbapi_find_emmpid(demux_index, emmtype, rdr->csystem.caids[0], 0); //Bulcrypt
+ 					if(l < 0)
+--- module-stat.c	2014-11-03 14:57:39.000000000 +0100
++++ module-stat.c.mod.c	2014-11-03 14:58:30.000000000 +0100
+@@ -838,7 +838,7 @@
+ 
+ uint16_t get_rdr_caid(struct s_reader *rdr)
+ {
+-	if(is_network_reader(rdr))
++	if(is_network_reader(rdr) || rdr->typ == R_EMU)
+ 	{
+ 		return 0; //reader caid is not real caid
+ 	}
+@@ -1236,7 +1236,7 @@
+ 		for(ea = er->matching_rdr; ea; ea = ea->next)
+ 		{
+ 			rdr = ea->reader;
+-			if(is_network_reader(rdr))    //reader caid is not real caid
++			if(is_network_reader(rdr) || rdr->typ == R_EMU)    //reader caid is not real caid
+ 			{
+ 				prv = ea;
+ 				continue; // proxy can convert or reject
+--- module-webif.c	2014-11-03 14:57:39.000000000 +0100
++++ module-webif.c.mod.c	2014-11-03 15:01:28.000000000 +0100
+@@ -108,7 +108,8 @@
+ #define MNU_CFG_WHITELIST 25
+ #define MNU_CFG_RATELIMIT 26
+ #define MNU_CFG_FCSS 27
+-#define MNU_CFG_TOTAL_ITEMS 28 // sum of items above. Use it for "All inactive" in function calls too.
++#define MNU_CFG_KEY 28
++#define MNU_CFG_TOTAL_ITEMS 29 // sum of items above. Use it for "All inactive" in function calls too.
+ 
+ static void set_status_info_var(struct templatevars *vars, char *varname, int no_data, char *fmt, double value) {
+ 	if (no_data)
+@@ -1729,7 +1730,7 @@
+ 		chk_reader("services", servicelabels, rdr);
+ 		chk_reader("lb_whitelist_services", servicelabelslb, rdr);
+ 
+-		if(is_network_reader(rdr))    //physical readers make trouble if re-started
++		if(is_network_reader(rdr) || rdr->typ == R_EMU)    //physical readers make trouble if re-started
+ 		{
+ 			restart_cardreader(rdr, 1);
+ 		}
+@@ -2289,6 +2290,9 @@
+ 	case R_PCSC :
+ 		tpl_addVar(vars, TPLAPPEND, "READERDEPENDINGCONFIG", tpl_getTpl(vars, "READERCONFIGSTDHWREADERBIT"));
+ 		break;
++	case R_EMU:		
++		tpl_addVar(vars, TPLAPPEND, "READERDEPENDINGCONFIG", "");
++		break;
+ 	case R_CAMD35 :
+ 		tpl_addVar(vars, TPLAPPEND, "READERDEPENDINGCONFIG", tpl_getTpl(vars, "READERCONFIGCAMD35BIT"));
+ 		break;
+@@ -3901,9 +3905,31 @@
+ 
+ 					tpl_addVar(vars, TPLAPPEND, "LOGHISTORY", "<BR><BR>New Structure:<BR>");
+ 					char tbuffer[83];
++#ifdef WITH_EMU					
++					char keyBuffer[1024];
++#endif
+ 					while((item = ll_iter_next(&itr)))
+ 					{
+-
++#ifdef WITH_EMU						
++						if(item->isKey) {
++							tpl_addVar(vars, TPLADD, "ENTSTARTDATE", "");
++							tpl_addVar(vars, TPLADD, "ENTENDDATE", "");
++							cs_hexdump(0, item->key, item->keyLength, keyBuffer, sizeof(keyBuffer));
++							tpl_addVar(vars, TPLADD, "ENTEXPIERED", "e_valid");
++							tpl_printf(vars, TPLADD, "ENTCAID", "%04X", item->caid);
++							tpl_printf(vars, TPLADD, "ENTPROVID", "%06X", item->provid);
++							tpl_addVar(vars, TPLADD, "ENTID", item->name);
++							tpl_addVar(vars, TPLADD, "ENTCLASS", keyBuffer);
++							if(item->isData) { tpl_addVar(vars, TPLADD, "ENTTYPE", "data"); }
++							else { tpl_addVar(vars, TPLADD, "ENTTYPE", "key"); }
++							tpl_addVar(vars, TPLADD, "ENTRESNAME", "");
++
++							if((strcmp(getParam(params, "hideexpired"), "1") != 0) || (item->end > now))
++								{ tpl_addVar(vars, TPLAPPEND, "READERENTENTRY", tpl_getTpl(vars, "ENTITLEMENTITEMBIT")); }							
++						
++							continue;	
++						}
++#endif											
+ 						localtime_r(&item->start, &start_t);
+ 						localtime_r(&item->end, &end_t);
+ 
+@@ -4338,6 +4364,9 @@
+ #else
+ 						filtered = (type == cl->typ);
+ #endif
++#ifdef WITH_EMU
++                        if(type == 'e' && cl->typ == 'r' && cl->reader->typ == R_EMU) filtered = 1;
++#endif
+ 					}
+ 				}
+ 
+@@ -5644,6 +5673,9 @@
+ 		{ "oscam.conf",      MNU_CFG_FCONF,     FTYPE_CONFIG },
+ 		{ "oscam.user",      MNU_CFG_FUSER,     FTYPE_CONFIG },
+ 		{ "oscam.server",    MNU_CFG_FSERVER,   FTYPE_CONFIG },
++#ifdef WITH_EMU
++		{ "SoftCam.Key",     MNU_CFG_KEY,       FTYPE_CONFIG },
++#endif
+ 		{ "oscam.services",  MNU_CFG_FSERVICES, FTYPE_CONFIG },
+ 		{ "oscam.whitelist", MNU_CFG_WHITELIST, FTYPE_CONFIG },
+ 		{ "oscam.srvid",     MNU_CFG_FSRVID,    FTYPE_CONFIG },
+@@ -6984,8 +7016,8 @@
+ 		memcpy(*result + bufsize, buf2, n);
+ 		bufsize += n;
+ 
+-		//max request size 100kb
+-		if(bufsize > 102400)
++		//max request size 200kb
++		if(bufsize > 204800)
+ 		{
+ 			cs_log("error: too much data received from %s", cs_inet_ntoa(in));
+ 			NULLFREE(*result);
