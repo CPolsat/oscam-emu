@@ -1,5 +1,7 @@
---- CMakeLists.txt	2016-12-29 22:01:37.000000000 +0100
-+++ CMakeLists.txt	2016-12-29 22:02:39.923750391 +0100
+Index: CMakeLists.txt
+===================================================================
+--- CMakeLists.txt	(Revision 11297)
++++ CMakeLists.txt	(Arbeitskopie)
 @@ -101,6 +101,7 @@
      ${CMAKE_CURRENT_SOURCE_DIR}/csctapi
      ${CMAKE_CURRENT_SOURCE_DIR}/cscrypt
@@ -91,8 +93,59 @@
 +endif (WITH_EMU)
 +
  message (STATUS "")
---- config.h	2016-12-29 22:01:38.000000000 +0100
-+++ config.h	2016-12-29 22:02:39.923750391 +0100
+Index: Makefile
+===================================================================
+--- Makefile	(Revision 11297)
++++ Makefile	(Arbeitskopie)
+@@ -65,6 +65,13 @@
+ 
+ LDFLAGS = -Wl,--gc-sections
+ 
++TARGETHELP := $(shell $(CC) --target-help)
++ifneq (,$(findstring sse2,$(TARGETHELP)))
++override CFLAGS += -fexpensive-optimizations -mmmx -msse -msse2 -msse3
++else
++override CFLAGS += -fexpensive-optimizations
++endif
++
+ # The linker for powerpc have bug that prevents --gc-sections from working
+ # Check for the linker version and if it matches disable --gc-sections
+ # For more information about the bug see:
+@@ -268,6 +275,21 @@
+ SRC-$(CONFIG_MODULE_CCCAM) += module-cccam.c
+ SRC-$(CONFIG_MODULE_CCCSHARE) += module-cccshare.c
+ SRC-$(CONFIG_MODULE_CONSTCW) += module-constcw.c
++SRC-$(CONFIG_WITH_EMU) += module-emulator.c
++SRC-$(CONFIG_WITH_EMU) += module-emulator-osemu.c
++SRC-$(CONFIG_WITH_EMU) += module-emulator-stream.c
++SRC-$(CONFIG_WITH_EMU) += ffdecsa/ffdecsa.c
++UNAME := $(shell uname -s)
++ifneq ($(UNAME),Darwin)
++ifndef ANDROID_NDK
++ifndef ANDROID_STANDALONE_TOOLCHAIN
++ifeq "$(CONFIG_WITH_EMU)" "y"
++TOUCH_SK := $(shell touch SoftCam.Key)
++override LDFLAGS += -Wl,--format=binary -Wl,SoftCam.Key -Wl,--format=default
++endif
++endif
++endif
++endif
+ SRC-$(CONFIG_CS_CACHEEX) += module-csp.c
+ SRC-$(CONFIG_CW_CYCLE_CHECK) += module-cw-cycle-check.c
+ SRC-$(CONFIG_WITH_AZBOX) += module-dvbapi-azbox.c
+@@ -363,7 +385,7 @@
+ # starts the compilation.
+ all:
+ 	@./config.sh --use-flags "$(USE_FLAGS)" --objdir "$(OBJDIR)" --make-config.mak
+-	@-mkdir -p $(OBJDIR)/cscrypt $(OBJDIR)/csctapi $(OBJDIR)/minilzo $(OBJDIR)/webif
++	@-mkdir -p $(OBJDIR)/cscrypt $(OBJDIR)/csctapi $(OBJDIR)/minilzo $(OBJDIR)/ffdecsa $(OBJDIR)/webif
+ 	@-printf "\
+ +-------------------------------------------------------------------------------\n\
+ | OSCam ver: $(VER) rev: $(SVN_REV) target: $(TARGET)\n\
+Index: config.h
+===================================================================
+--- config.h	(Revision 11297)
++++ config.h	(Arbeitskopie)
 @@ -1,6 +1,7 @@
  #ifndef CONFIG_H_
  #define CONFIG_H_
@@ -101,8 +154,10 @@
  #define WEBIF 1
  #define WEBIF_LIVELOG 1
  #define WEBIF_JQUERY 1
---- config.sh	2016-12-29 22:01:37.000000000 +0100
-+++ config.sh	2016-12-29 22:02:39.923750391 +0100
+Index: config.sh
+===================================================================
+--- config.sh	(Revision 11297)
++++ config.sh	(Arbeitskopie)
 @@ -1,6 +1,6 @@
  #!/bin/sh
  
@@ -158,8 +213,10 @@
  		2> ${tempfile}
  
  	opt=${?}
---- cscrypt/md5.c	2016-12-29 22:01:38.000000000 +0100
-+++ cscrypt/md5.c	2016-12-29 22:02:39.923750391 +0100
+Index: cscrypt/md5.c
+===================================================================
+--- cscrypt/md5.c	(Revision 11297)
++++ cscrypt/md5.c	(Arbeitskopie)
 @@ -25,13 +25,6 @@
  
  #if !defined(WITH_SSL) && !defined(WITH_LIBCRYPTO)
@@ -201,8 +258,10 @@
  {
  	unsigned count;
  	unsigned char *p;
---- cscrypt/md5.h	2016-12-29 22:01:38.000000000 +0100
-+++ cscrypt/md5.h	2016-12-29 22:02:39.923750391 +0100
+Index: cscrypt/md5.h
+===================================================================
+--- cscrypt/md5.h	(Revision 11297)
++++ cscrypt/md5.h	(Arbeitskopie)
 @@ -7,8 +7,16 @@
  #define MD5_DIGEST_LENGTH 16
  
@@ -219,11 +278,13 @@
 +void MD5_Init(MD5_CTX *ctx);
 +void MD5_Update(MD5_CTX *ctx, const unsigned char *buf, unsigned int len);
 +void MD5_Final(unsigned char digest[MD5_DIGEST_LENGTH], MD5_CTX *ctx);
-+#endif
-+char *__md5_crypt(const char *text_pass, const char *salt, char *crypted_passwd);
  #endif
---- csctapi/cardreaders.h	2016-12-29 22:01:37.000000000 +0100
-+++ csctapi/cardreaders.h	2016-12-29 22:02:39.923750391 +0100
++char *__md5_crypt(const char *text_pass, const char *salt, char *crypted_passwd);
++#endif
+Index: csctapi/cardreaders.h
+===================================================================
+--- csctapi/cardreaders.h	(Revision 11297)
++++ csctapi/cardreaders.h	(Arbeitskopie)
 @@ -14,5 +14,6 @@
  extern const struct s_cardreader cardreader_stapi;
  extern const struct s_cardreader cardreader_stinger;
@@ -231,8 +292,10 @@
 +extern const struct s_cardreader cardreader_emu;
  
  #endif
---- ffdecsa/CMakeLists.txt	1970-01-01 01:00:00.000000000 +0100
-+++ ffdecsa/CMakeLists.txt	2016-12-29 22:02:39.923750391 +0100
+Index: ffdecsa/CMakeLists.txt
+===================================================================
+--- ffdecsa/CMakeLists.txt	(Revision 0)
++++ ffdecsa/CMakeLists.txt	(Arbeitskopie)
 @@ -0,0 +1,8 @@
 +project (ffdecsa)
 +
@@ -242,8 +305,10 @@
 +set (lib_name "ffdecsa")
 +
 +add_library (${lib_name} STATIC ${ffdecsa_srcs} ${ffdecsa_hdrs})
---- ffdecsa/COPYING	1970-01-01 01:00:00.000000000 +0100
-+++ ffdecsa/COPYING	2016-12-29 22:02:39.923750391 +0100
+Index: ffdecsa/COPYING
+===================================================================
+--- ffdecsa/COPYING	(Revision 0)
++++ ffdecsa/COPYING	(Arbeitskopie)
 @@ -0,0 +1,339 @@
 +		    GNU GENERAL PUBLIC LICENSE
 +		       Version 2, June 1991
@@ -584,8 +649,17 @@
 +consider it more useful to permit linking proprietary applications with the
 +library.  If this is what you want to do, use the GNU Library General
 +Public License instead of this License.
---- ffdecsa/ffdecsa.c	1970-01-01 01:00:00.000000000 +0100
-+++ ffdecsa/ffdecsa.c	2016-12-29 22:02:39.923750391 +0100
+Index: ffdecsa/Makefile
+===================================================================
+--- ffdecsa/Makefile	(Revision 0)
++++ ffdecsa/Makefile	(Arbeitskopie)
+@@ -0,0 +1,2 @@
++parent:
++	@$(MAKE) --no-print-directory -C ..
+Index: ffdecsa/ffdecsa.c
+===================================================================
+--- ffdecsa/ffdecsa.c	(Revision 0)
++++ ffdecsa/ffdecsa.c	(Arbeitskopie)
 @@ -0,0 +1,926 @@
 +/* FFdecsa -- fast decsa algorithm
 + *
@@ -1513,8 +1587,10 @@
 +
 +  return advanced;
 +}
---- ffdecsa/ffdecsa.h	1970-01-01 01:00:00.000000000 +0100
-+++ ffdecsa/ffdecsa.h	2016-12-29 22:02:39.923750391 +0100
+Index: ffdecsa/ffdecsa.h
+===================================================================
+--- ffdecsa/ffdecsa.h	(Revision 0)
++++ ffdecsa/ffdecsa.h	(Arbeitskopie)
 @@ -0,0 +1,62 @@
 +/* FFdecsa -- fast decsa algorithm
 + *
@@ -1578,8 +1654,10 @@
 +int decrypt_packets(void *keys, unsigned char **cluster);
 +
 +#endif
---- ffdecsa/fftable.h	1970-01-01 01:00:00.000000000 +0100
-+++ ffdecsa/fftable.h	2016-12-29 22:02:39.923750391 +0100
+Index: ffdecsa/fftable.h
+===================================================================
+--- ffdecsa/fftable.h	(Revision 0)
++++ ffdecsa/fftable.h	(Arbeitskopie)
 @@ -0,0 +1,56 @@
 +/* FFdecsa -- fast decsa algorithm
 + *
@@ -1637,13 +1715,10 @@
 +}
 +
 +#endif //FFTABLE_H 
---- ffdecsa/Makefile	1970-01-01 01:00:00.000000000 +0100
-+++ ffdecsa/Makefile	2016-12-29 22:02:39.923750391 +0100
-@@ -0,0 +1,2 @@
-+parent:
-+	@$(MAKE) --no-print-directory -C ..
---- ffdecsa/parallel_032_int.h	1970-01-01 01:00:00.000000000 +0100
-+++ ffdecsa/parallel_032_int.h	2016-12-29 22:02:39.923750391 +0100
+Index: ffdecsa/parallel_032_int.h
+===================================================================
+--- ffdecsa/parallel_032_int.h	(Revision 0)
++++ ffdecsa/parallel_032_int.h	(Arbeitskopie)
 @@ -0,0 +1,55 @@
 +/* FFdecsa -- fast decsa algorithm
 + *
@@ -1700,8 +1775,10 @@
 +#define B_FFN_ALL_80() 0x80808080
 +
 +#define M_EMPTY()
---- ffdecsa/parallel_064_long.h	1970-01-01 01:00:00.000000000 +0100
-+++ ffdecsa/parallel_064_long.h	2016-12-29 22:02:39.923750391 +0100
+Index: ffdecsa/parallel_064_long.h
+===================================================================
+--- ffdecsa/parallel_064_long.h	(Revision 0)
++++ ffdecsa/parallel_064_long.h	(Arbeitskopie)
 @@ -0,0 +1,39 @@
 +/* FFdecsa -- fast decsa algorithm
 + *
@@ -1742,8 +1819,10 @@
 +#define M_EMPTY()
 +
 +#include "fftable.h"
---- ffdecsa/parallel_128_sse2.h	1970-01-01 01:00:00.000000000 +0100
-+++ ffdecsa/parallel_128_sse2.h	2016-12-29 22:02:39.923750391 +0100
+Index: ffdecsa/parallel_128_sse2.h
+===================================================================
+--- ffdecsa/parallel_128_sse2.h	(Revision 0)
++++ ffdecsa/parallel_128_sse2.h	(Arbeitskopie)
 @@ -0,0 +1,82 @@
 +/* FFdecsa -- fast decsa algorithm
 + *
@@ -1827,8 +1906,10 @@
 +}
 +
 +#include "fftable.h"
---- ffdecsa/parallel_generic.h	1970-01-01 01:00:00.000000000 +0100
-+++ ffdecsa/parallel_generic.h	2016-12-29 22:02:39.923750391 +0100
+Index: ffdecsa/parallel_generic.h
+===================================================================
+--- ffdecsa/parallel_generic.h	(Revision 0)
++++ ffdecsa/parallel_generic.h	(Arbeitskopie)
 @@ -0,0 +1,102 @@
 +/* FFdecsa -- fast decsa algorithm
 + *
@@ -1932,8 +2013,10 @@
 +
 +#define END_MM             do{ }while(0);
 +#endif
---- ffdecsa/parallel_std_def.h	1970-01-01 01:00:00.000000000 +0100
-+++ ffdecsa/parallel_std_def.h	2016-12-29 22:02:39.923750391 +0100
+Index: ffdecsa/parallel_std_def.h
+===================================================================
+--- ffdecsa/parallel_std_def.h	(Revision 0)
++++ ffdecsa/parallel_std_def.h	(Arbeitskopie)
 @@ -0,0 +1,29 @@
 +/* FFdecsa -- fast decsa algorithm
 + *
@@ -1964,8 +2047,10 @@
 +#define B_FFXOR(a,b) ((a)^(b))
 +#define B_FFSH8L(a,n) ((a)<<(n))
 +#define B_FFSH8R(a,n) ((a)>>(n))
---- ffdecsa/stream.c	1970-01-01 01:00:00.000000000 +0100
-+++ ffdecsa/stream.c	2016-12-29 22:02:39.923750391 +0100
+Index: ffdecsa/stream.c
+===================================================================
+--- ffdecsa/stream.c	(Revision 0)
++++ ffdecsa/stream.c	(Arbeitskopie)
 @@ -0,0 +1,906 @@
 +/* FFdecsa -- fast decsa algorithm
 + *
@@ -2873,8 +2958,10 @@
 +
 +}
 +
---- globals.h	2016-12-29 22:01:37.000000000 +0100
-+++ globals.h	2016-12-29 22:02:39.923750391 +0100
+Index: globals.h
+===================================================================
+--- globals.h	(Revision 11297)
++++ globals.h	(Arbeitskopie)
 @@ -387,17 +387,17 @@
  #define CS_ECM_RINGBUFFER_MAX 0x10 // max size for ECM last responsetimes ringbuffer. Keep this set to power of 2 values!
  
@@ -2983,58 +3070,13 @@
  
 +#ifdef WITH_EMU
 +FILTER* get_emu_prids_for_caid(struct s_reader *rdr, uint16_t caid);
-+#endif
-+
  #endif
---- Makefile	2016-12-29 22:01:37.000000000 +0100
-+++ Makefile	2016-12-29 22:02:39.923750391 +0100
-@@ -65,6 +65,13 @@
- 
- LDFLAGS = -Wl,--gc-sections
- 
-+TARGETHELP := $(shell $(CC) --target-help)
-+ifneq (,$(findstring sse2,$(TARGETHELP)))
-+override CFLAGS += -fexpensive-optimizations -mmmx -msse -msse2 -msse3
-+else
-+override CFLAGS += -fexpensive-optimizations
-+endif
 +
- # The linker for powerpc have bug that prevents --gc-sections from working
- # Check for the linker version and if it matches disable --gc-sections
- # For more information about the bug see:
-@@ -268,6 +275,21 @@
- SRC-$(CONFIG_MODULE_CCCAM) += module-cccam.c
- SRC-$(CONFIG_MODULE_CCCSHARE) += module-cccshare.c
- SRC-$(CONFIG_MODULE_CONSTCW) += module-constcw.c
-+SRC-$(CONFIG_WITH_EMU) += module-emulator.c
-+SRC-$(CONFIG_WITH_EMU) += module-emulator-osemu.c
-+SRC-$(CONFIG_WITH_EMU) += module-emulator-stream.c
-+SRC-$(CONFIG_WITH_EMU) += ffdecsa/ffdecsa.c
-+UNAME := $(shell uname -s)
-+ifneq ($(UNAME),Darwin)
-+ifndef ANDROID_NDK
-+ifndef ANDROID_STANDALONE_TOOLCHAIN
-+ifeq "$(CONFIG_WITH_EMU)" "y"
-+TOUCH_SK := $(shell touch SoftCam.Key)
-+override LDFLAGS += -Wl,--format=binary -Wl,SoftCam.Key -Wl,--format=default
-+endif
-+endif
-+endif
-+endif
- SRC-$(CONFIG_CS_CACHEEX) += module-csp.c
- SRC-$(CONFIG_CW_CYCLE_CHECK) += module-cw-cycle-check.c
- SRC-$(CONFIG_WITH_AZBOX) += module-dvbapi-azbox.c
-@@ -363,7 +385,7 @@
- # starts the compilation.
- all:
- 	@./config.sh --use-flags "$(USE_FLAGS)" --objdir "$(OBJDIR)" --make-config.mak
--	@-mkdir -p $(OBJDIR)/cscrypt $(OBJDIR)/csctapi $(OBJDIR)/minilzo $(OBJDIR)/webif
-+	@-mkdir -p $(OBJDIR)/cscrypt $(OBJDIR)/csctapi $(OBJDIR)/minilzo $(OBJDIR)/ffdecsa $(OBJDIR)/webif
- 	@-printf "\
- +-------------------------------------------------------------------------------\n\
- | OSCam ver: $(VER) rev: $(SVN_REV) target: $(TARGET)\n\
---- module-dvbapi.c	2016-12-29 22:01:37.000000000 +0100
-+++ module-dvbapi.c	2016-12-29 22:02:39.923750391 +0100
++#endif
+Index: module-dvbapi.c
+===================================================================
+--- module-dvbapi.c	(Revision 11297)
++++ module-dvbapi.c	(Arbeitskopie)
 @@ -1439,7 +1439,15 @@
  			}
  			if(match)
@@ -3076,7 +3118,7 @@
  		ECM_REQUEST *er;
  		
  		if(len != 0)  // len = 0 receiver encountered an internal bufferoverflow!
-@@ -4361,8 +4377,23 @@
+@@ -4361,9 +4377,24 @@
  				return;
  			}
  
@@ -3085,7 +3127,7 @@
 +			if(curpid->CAID>>8 == 0x0E)
 +			{
 +				pvu_skip = 1;
-+				
+ 				
 +				if(sctlen > 0xb)
 +				{
 +					if(buffer[0xb] > curpid->pvu_counter || (curpid->pvu_counter == 255 && buffer[0xb] == 0)
@@ -3099,9 +3141,10 @@
 +
 +			if((curpid->table == buffer[0] && !caid_is_irdeto(curpid->CAID)) || pvu_skip)  // wait for odd / even ecm change (only not for irdeto!)
 +			{
- 				
++				
  				if(!(er = get_ecmtask()))
  				{ 
+ 					return;
 @@ -4643,6 +4674,40 @@
  			dvbapi_stop_filternum(demux_id, filter_num);
  			return;
@@ -3153,8 +3196,10 @@
  		switch(selected_api)
  		{
  #if defined(WITH_STAPI) || defined(WITH_STAPI5)
---- module-dvbapi.h	2016-12-29 22:01:37.000000000 +0100
-+++ module-dvbapi.h	2016-12-29 22:02:39.923750391 +0100
+Index: module-dvbapi.h
+===================================================================
+--- module-dvbapi.h	(Revision 11297)
++++ module-dvbapi.h	(Arbeitskopie)
 @@ -136,6 +136,7 @@
  	int8_t useMultipleIndices;
  	uint32_t streams;
@@ -3173,856 +3218,11 @@
  } FILTERTYPE;
  
  struct s_emmpids
---- module-emulator.c	1970-01-01 01:00:00.000000000 +0100
-+++ module-emulator.c	2016-12-29 22:02:39.923750391 +0100
-@@ -0,0 +1,844 @@
-+#include "globals.h"
-+#include "oscam-string.h"
-+#include "oscam-config.h"
-+#include "oscam-conf-chk.h"
-+#include "oscam-time.h"
-+#include "module-emulator-osemu.h"
-+#include "module-emulator-stream.h"
-+
-+// oscam virtual emu card reader
-+#define CS_OK      1
-+#define CS_ERROR   0
-+
-+static int32_t emu_do_ecm(struct s_reader *rdr, const struct ecm_request_t *er, struct s_ecm_answer *ea)
-+{
-+	ReaderInstanceData idata;
-+	idata.extee36 = rdr->extee36;
-+	idata.extee56 = rdr->extee56;
-+	idata.ee36 = rdr->ee36;
-+	idata.ee56 = rdr->ee56;
-+	idata.dre36_force_group = rdr->dre36_force_group;
-+	idata.dre56_force_group = rdr->dre56_force_group;
-+	
-+	if (!ProcessECM(er->ecmlen, er->caid, er->prid, er->ecm, ea->cw, er->srvid, er->pid, &ea->cw_ex, &idata)) {
-+		return CS_OK;
-+	}
-+
-+	return CS_ERROR;
-+}
-+
-+static void refresh_entitlements(struct s_reader *reader);
-+
-+static int32_t emu_do_emm(struct s_reader *rdr, struct emm_packet_t *emm)
-+{
-+	uint32_t keysAdded = 0;
-+
-+	if(emm->emmlen < 3) {
-+		return CS_ERROR;
-+	}
-+
-+	if(SCT_LEN(emm->emm) > emm->emmlen) {
-+		return CS_ERROR;
-+	}
-+
-+	ReaderInstanceData idata;
-+	idata.extee36 = rdr->extee36;
-+	idata.extee56 = rdr->extee56;
-+	idata.ee36 = rdr->ee36;
-+	idata.ee56 = rdr->ee56;
-+	idata.dre36_force_group = rdr->dre36_force_group;
-+	idata.dre56_force_group = rdr->dre56_force_group;
-+	
-+	if(!ProcessEMM(b2i(2, emm->caid), b2i(4, emm->provid), emm->emm, &idata, &keysAdded)) {
-+		if(keysAdded > 0) { refresh_entitlements(rdr); }
-+		return CS_OK;
-+	}
-+
-+	return CS_ERROR;
-+}
-+
-+static int32_t EMU_Init(struct s_reader *reader);
-+
-+static int32_t emu_card_info(struct s_reader *rdr) {
-+	EMU_Init(rdr);
-+	return CS_OK;
-+}
-+
-+static int32_t emu_card_init(struct s_reader *UNUSED(rdr), struct s_ATR *UNUSED(atr))
-+{return CS_ERROR;}
-+
-+static int32_t emu_get_emm_filter(struct s_reader *UNUSED(rdr), struct s_csystem_emm_filter **UNUSED(emm_filters), unsigned int *UNUSED(filter_count))
-+{return CS_ERROR;}
-+
-+
-+int32_t emu_get_via3_emm_type(EMM_PACKET *ep, struct s_reader *rdr)
-+{
-+	uint32_t provid = 0;
-+
-+	if(ep->emm[3] == 0x90 && ep->emm[4] == 0x03)
-+	{
-+		provid = b2i(3, ep->emm+5);
-+		provid &=0xFFFFF0; 
-+		i2b_buf(4, provid, ep->provid);
-+	}
-+
-+	switch(ep->emm[0])
-+	{
-+	case 0x88:
-+		ep->type = UNIQUE;
-+		memset(ep->hexserial, 0, 8);
-+		memcpy(ep->hexserial, ep->emm + 4, 4);
-+		rdr_log_dbg(rdr, D_EMM, "UNIQUE");
-+		return 1;
-+
-+	case 0x8A:
-+	case 0x8B:
-+		ep->type = GLOBAL;
-+		rdr_log_dbg(rdr, D_EMM, "GLOBAL");
-+		return 1;
-+
-+	case 0x8C:
-+	case 0x8D:
-+		ep->type = SHARED;
-+		rdr_log_dbg(rdr, D_EMM, "SHARED (part)");
-+		// We need those packets to pass otherwise we would never
-+		// be able to complete EMM reassembly
-+		return 1;
-+
-+	case 0x8E:
-+		ep->type = SHARED;
-+		rdr_log_dbg(rdr, D_EMM, "SHARED");
-+		memset(ep->hexserial, 0, 8);
-+		memcpy(ep->hexserial, ep->emm + 3, 3);
-+		return 1;
-+
-+	default:
-+		ep->type = UNKNOWN;
-+		rdr_log_dbg(rdr, D_EMM, "UNKNOWN");
-+		return 1;
-+	}
-+}
-+
-+int32_t emu_get_ird2_emm_type(EMM_PACKET *ep, struct s_reader *rdr)
-+{
-+	int32_t l = (ep->emm[3] & 0x07);
-+	int32_t base = (ep->emm[3] >> 3);
-+	char dumprdrserial[l * 3], dumpemmserial[l * 3];
-+
-+	switch(l)
-+	{
-+
-+	case 0:
-+		// global emm, 0 bytes addressed
-+		ep->type = GLOBAL;
-+		rdr_log_dbg(rdr, D_EMM, "GLOBAL base = %02x", base);
-+		return 1;
-+
-+	case 2:
-+		// shared emm, 2 bytes addressed
-+		ep->type = SHARED;
-+		memset(ep->hexserial, 0, 8);
-+		memcpy(ep->hexserial, ep->emm + 4, l);
-+		cs_hexdump(1, rdr->hexserial, l, dumprdrserial, sizeof(dumprdrserial));
-+		cs_hexdump(1, ep->hexserial, l, dumpemmserial, sizeof(dumpemmserial));
-+		rdr_log_dbg_sensitive(rdr, D_EMM, "SHARED l = %d ep = {%s} rdr = {%s} base = %02x", l,
-+								 dumpemmserial, dumprdrserial, base);
-+		return 1;
-+
-+	case 3:
-+		// unique emm, 3 bytes addressed
-+		ep->type = UNIQUE;
-+		memset(ep->hexserial, 0, 8);
-+		memcpy(ep->hexserial, ep->emm + 4, l);
-+		cs_hexdump(1, rdr->hexserial, l, dumprdrserial, sizeof(dumprdrserial));
-+		cs_hexdump(1, ep->hexserial, l, dumpemmserial, sizeof(dumpemmserial));
-+		rdr_log_dbg_sensitive(rdr, D_EMM, "UNIQUE l = %d ep = {%s} rdr = {%s} base = %02x", l,
-+								 dumpemmserial, dumprdrserial, base);
-+		return 1;
-+
-+	default:
-+		ep->type = UNKNOWN;
-+		rdr_log_dbg(rdr, D_EMM, "UNKNOWN");
-+		return 1;
-+	}
-+}
-+
-+int32_t emu_get_pvu_emm_type(EMM_PACKET *ep, struct s_reader *rdr)
-+{
-+	if(ep->emm[0] == 0x82)
-+	{
-+		ep->type = UNIQUE;
-+		memset(ep->hexserial, 0, 8);
-+		memcpy(ep->hexserial, ep->emm + 12, 4);
-+	}
-+	else
-+	{
-+		ep->type = UNKNOWN;
-+		rdr_log_dbg(rdr, D_EMM, "UNKNOWN");
-+	}
-+	return 1;	
-+}
-+
-+int32_t emu_get_dre2_emm_type(EMM_PACKET *ep, struct s_reader *UNUSED(rdr))
-+{
-+	if(ep->emm[0] == 0x91)
-+	{
-+		ep->type = GLOBAL;
-+		return 1;
-+	}
-+	else if(ep->emm[0] == 0x82)
-+	{
-+		ep->type = GLOBAL;
-+		return 1;
-+	}
-+	else
-+	{
-+		switch(ep->emm[0])
-+		{
-+		case 0x86:
-+			ep->type = SHARED;
-+			memset(ep->hexserial, 0, 8);
-+			ep->hexserial[0] = ep->emm[3];
-+			return 1;
-+
-+			//case 0x87:
-+			//	ep->type = UNIQUE;
-+			//	return 1; //FIXME: no filling of ep->hexserial
-+			
-+			case 0x88:
-+				ep->type = UNIQUE;
-+				return 1; //FIXME: no filling of ep->hexserial
-+    	
-+		default:
-+			ep->type = UNKNOWN;
-+			return 1;
-+		}
-+	}
-+}
-+
-+int32_t emu_get_tan_emm_type(EMM_PACKET *ep, struct s_reader *rdr)
-+{
-+	if(ep->emm[0] == 0x82 || ep->emm[0] == 0x83)
-+	{
-+		ep->type = GLOBAL;
-+	}
-+	else
-+	{
-+		ep->type = UNKNOWN;
-+		rdr_log_dbg(rdr, D_EMM, "UNKNOWN");
-+	}
-+	return 1;	
-+}
-+
-+static int32_t emu_get_emm_type(struct emm_packet_t *ep, struct s_reader *rdr)
-+{
-+	switch(b2i(2, ep->caid)>>8)
-+	{
-+		case 0x05:
-+			return emu_get_via3_emm_type(ep, rdr);
-+
-+		case 0x06:
-+			return emu_get_ird2_emm_type(ep, rdr);
-+			
-+		case 0x0E:
-+			return emu_get_pvu_emm_type(ep, rdr);
-+	
-+		case 0x4A:
-+			return emu_get_dre2_emm_type(ep, rdr);
-+	
-+		case 0x10:
-+			return emu_get_tan_emm_type(ep, rdr);
-+				
-+		default:
-+			break;
-+	}
-+	
-+	return CS_ERROR;
-+}
-+
-+static int32_t emu_get_via3_emm_filter(struct s_reader *UNUSED(rdr), struct s_csystem_emm_filter **emm_filters, unsigned int *filter_count, uint16_t UNUSED(caid), uint32_t UNUSED(provid))
-+{
-+	if(*emm_filters == NULL)
-+	{
-+		const unsigned int max_filter_count = 1;
-+		
-+		if(!cs_malloc(emm_filters, max_filter_count * sizeof(struct s_csystem_emm_filter)))
-+			{ return CS_ERROR; }
-+
-+		struct s_csystem_emm_filter *filters = *emm_filters;
-+		*filter_count = 0;
-+
-+		int32_t idx = 0;
-+
-+		filters[idx].type = EMM_GLOBAL;
-+		filters[idx].enabled   = 1;
-+		filters[idx].filter[0] = 0x8A;
-+		filters[idx].mask[0]   = 0xFE;
-+		filters[idx].filter[3] = 0x80; 
-+		filters[idx].mask[3]   = 0x80;
-+		idx++;
-+
-+		*filter_count = idx;
-+	}	
-+	
-+	return CS_OK;
-+}
-+
-+static int32_t emu_get_ird2_emm_filter(struct s_reader* rdr, struct s_csystem_emm_filter **emm_filters, unsigned int *filter_count, uint16_t caid, uint32_t UNUSED(provid))
-+{
-+	uint8_t hexserial[3], prid[4];
-+	FILTER* emu_provids;
-+	int8_t have_provid = 0, have_serial = 0;
-+	int32_t i;
-+	
-+	if(GetIrdeto2Hexserial(caid, hexserial))
-+		{ have_serial = 1; }
-+
-+	emu_provids = get_emu_prids_for_caid(rdr, caid);
-+	if(emu_provids != NULL && emu_provids->nprids > 0)
-+		{ have_provid = 1;}		
-+
-+	if(*emm_filters == NULL)
-+	{
-+		const unsigned int max_filter_count = have_serial + (2*(have_provid ? emu_provids->nprids : 0));
-+		if(!cs_malloc(emm_filters, max_filter_count * sizeof(struct s_csystem_emm_filter)))
-+			{ return CS_ERROR; }
-+
-+		struct s_csystem_emm_filter *filters = *emm_filters;
-+		*filter_count = 0;
-+
-+		unsigned int idx = 0;
-+
-+		if(have_serial)
-+		{
-+			filters[idx].type = EMM_UNIQUE;
-+			filters[idx].enabled   = 1;
-+			filters[idx].filter[0] = 0x82;
-+			filters[idx].mask[0]   = 0xFF;
-+			filters[idx].filter[1] = 0xFB;
-+			filters[idx].mask[1]   = 0x07;
-+			memcpy(&filters[idx].filter[2], hexserial, 3);
-+			memset(&filters[idx].mask[2], 0xFF, 3);
-+			idx++;
-+		}
-+		
-+		for(i=0; have_provid && i<emu_provids->nprids; i++)
-+		{
-+			i2b_buf(4, emu_provids->prids[i], prid);
-+			
-+			filters[idx].type = EMM_UNIQUE;
-+			filters[idx].enabled   = 1;
-+			filters[idx].filter[0] = 0x82;
-+			filters[idx].mask[0]   = 0xFF;
-+			filters[idx].filter[1] = 0xFB;
-+			filters[idx].mask[1]   = 0x07;
-+			memcpy(&filters[idx].filter[2], &prid[1], 3);
-+			memset(&filters[idx].mask[2], 0xFF, 3);
-+			idx++;
-+        	
-+			filters[idx].type = EMM_SHARED;
-+			filters[idx].enabled   = 1;
-+			filters[idx].filter[0] = 0x82;
-+			filters[idx].mask[0]   = 0xFF;
-+			filters[idx].filter[1] = 0xFA;
-+			filters[idx].mask[1]   = 0x07;
-+			memcpy(&filters[idx].filter[2], &prid[1], 2);
-+			memset(&filters[idx].mask[2], 0xFF, 2);
-+			idx++;
-+		}
-+
-+		*filter_count = idx;
-+	}
-+
-+	return CS_OK;
-+}
-+
-+static int32_t emu_get_pvu_emm_filter(struct s_reader *UNUSED(rdr), struct s_csystem_emm_filter **emm_filters, unsigned int *filter_count, uint16_t UNUSED(caid), uint32_t UNUSED(provid), uint16_t srvid)
-+{
-+	uint8_t hexserials[16][4];
-+	int32_t i, count = 0;
-+	
-+	if(!GetPowervuHexserials(srvid, hexserials, 16, &count))
-+		{ return CS_ERROR; }
-+	
-+	if(*emm_filters == NULL)
-+	{
-+		const unsigned int max_filter_count = count;
-+		if(!cs_malloc(emm_filters, max_filter_count * sizeof(struct s_csystem_emm_filter)))
-+			{ return CS_ERROR; }
-+
-+		struct s_csystem_emm_filter *filters = *emm_filters;
-+		*filter_count = 0;
-+
-+		int32_t idx = 0;
-+
-+		for(i=0; i<count; i++)
-+		{
-+			filters[idx].type = EMM_UNIQUE;
-+			filters[idx].enabled   = 1;
-+			filters[idx].filter[0] = 0x82;
-+			filters[idx].filter[10] = hexserials[i][0];
-+			filters[idx].filter[11] = hexserials[i][1];
-+			filters[idx].filter[12] = hexserials[i][2];
-+			filters[idx].filter[13] = hexserials[i][3];
-+			filters[idx].mask[0]   = 0xFF;
-+			filters[idx].mask[10]  = 0xFF;
-+			filters[idx].mask[11]  = 0xFF;
-+			filters[idx].mask[12]  = 0xFF;
-+			filters[idx].mask[13]  = 0xFF;
-+			idx++;
-+		}
-+
-+		*filter_count = idx;
-+	}
-+
-+	return CS_OK;
-+}
-+
-+static int32_t emu_get_dre2_emm_filter(struct s_reader *UNUSED(rdr), struct s_csystem_emm_filter **emm_filters, unsigned int *filter_count, uint16_t caid, uint32_t provid)
-+{
-+	uint8_t hexserials[16];
-+	int32_t i, count = 0;
-+	
-+	if(!GetDrecryptHexserials(caid, provid, hexserials, 16, &count))
-+		{ count = 0; }
-+	
-+	if(*emm_filters == NULL)
-+	{
-+		const unsigned int max_filter_count = 1 + count + 1;
-+		if(!cs_malloc(emm_filters, max_filter_count * sizeof(struct s_csystem_emm_filter)))
-+			{ return CS_ERROR; }
-+
-+		struct s_csystem_emm_filter *filters = *emm_filters;
-+		*filter_count = 0;
-+
-+		int32_t idx = 0;
-+
-+		if(provid == 0xFE)
-+		{
-+			filters[idx].type = EMM_GLOBAL;
-+			filters[idx].enabled   = 1;
-+			filters[idx].filter[0] = 0x91;
-+			filters[idx].mask[0]   = 0xFF;
-+			idx++;
-+		}
-+		
-+		for(i=0; i<count; i++)
-+		{
-+			filters[idx].type = EMM_SHARED;
-+			filters[idx].enabled   = 1;
-+			filters[idx].filter[0] = 0x86;
-+			filters[idx].filter[1] = hexserials[i];
-+			filters[idx].mask[0]   = 0xFF;
-+			filters[idx].mask[1]   = 0xFF;
-+			idx++;
-+		}
-+		
-+		//filters[idx].type = EMM_UNIQUE;
-+		//filters[idx].enabled   = 1;
-+		//filters[idx].filter[0] = 0x87;
-+		//filters[idx].mask[0]   = 0xFF;
-+		//idx++;
-+		
-+		filters[idx].type = EMM_UNIQUE;
-+		filters[idx].enabled   = 1;
-+		filters[idx].filter[0] = 0x88;
-+		filters[idx].mask[0]   = 0xFF;
-+		idx++;
-+		
-+		*filter_count = idx;
-+	}
-+
-+	return CS_OK;
-+}
-+
-+static int32_t emu_get_tan_emm_filter(struct s_reader *UNUSED(rdr), struct s_csystem_emm_filter **emm_filters, unsigned int *filter_count, uint16_t UNUSED(caid), uint32_t UNUSED(provid))
-+{
-+	if(*emm_filters == NULL)
-+	{
-+		const unsigned int max_filter_count = 2;
-+		uint8_t buf[8];
-+		
-+		if(!FindKey('T', 0x40, 0, "MK", buf, 8, 0, 0, 0, NULL))
-+			{ return CS_ERROR; }
-+		
-+		if(!cs_malloc(emm_filters, max_filter_count * sizeof(struct s_csystem_emm_filter)))
-+			{ return CS_ERROR; }
-+
-+		struct s_csystem_emm_filter *filters = *emm_filters;
-+		*filter_count = 0;
-+
-+		int32_t idx = 0;
-+
-+		filters[idx].type = EMM_GLOBAL;
-+		filters[idx].enabled   = 1;
-+		filters[idx].filter[0] = 0x82;
-+		filters[idx].mask[0]   = 0xFF;
-+		idx++;
-+
-+		filters[idx].type = EMM_GLOBAL;
-+		filters[idx].enabled   = 1;
-+		filters[idx].filter[0] = 0x83;
-+		filters[idx].mask[0]   = 0xFF;
-+		idx++;
-+
-+		*filter_count = idx;
-+	}	
-+	
-+	return CS_OK;
-+}
-+
-+static int32_t emu_get_emm_filter_adv(struct s_reader *rdr, struct s_csystem_emm_filter **emm_filters, unsigned int *filter_count, uint16_t caid, uint32_t provid, uint16_t srvid)
-+{
-+	switch(caid>>8)
-+	{
-+		case 0x05:
-+			return emu_get_via3_emm_filter(rdr, emm_filters, filter_count, caid, provid);
-+
-+		case 0x06:
-+			return emu_get_ird2_emm_filter(rdr, emm_filters, filter_count, caid, provid);
-+			
-+		case 0x0E:
-+			return emu_get_pvu_emm_filter(rdr, emm_filters, filter_count, caid, provid, srvid);
-+			
-+		case 0x4A:
-+			return emu_get_dre2_emm_filter(rdr, emm_filters, filter_count, caid, provid);
-+	
-+		case 0x10:
-+			return emu_get_tan_emm_filter(rdr, emm_filters, filter_count, caid, provid);
-+		
-+		default:
-+			break;
-+	}
-+	
-+	return CS_ERROR;
-+}
-+
-+const struct s_cardsystem reader_emu =
-+{
-+	.desc = "emu",
-+	.caids = (uint16_t[]){ 0x0D, 0x09, 0x0500, 0x18, 0x06, 0x26, 0xFFFF, 0x0E, 0x4A, 0x10, 0 },
-+	.do_ecm = emu_do_ecm,
-+	.do_emm = emu_do_emm,
-+	.card_info = emu_card_info,
-+	.card_init = emu_card_init,
-+	.get_emm_type = emu_get_emm_type,
-+	.get_emm_filter = emu_get_emm_filter, //needed to pass checks
-+	.get_emm_filter_adv = emu_get_emm_filter_adv,
-+};
-+
-+
-+#define CR_OK 0
-+#define CR_ERROR 1
-+
-+static void emu_add_entitlement(struct s_reader *rdr, uint16_t caid, uint32_t provid, uint8_t *key, char *keyName, uint32_t keyLength, uint8_t isData)
-+{
-+	if(!rdr->ll_entitlements) { rdr->ll_entitlements = ll_create("ll_entitlements"); }
-+
-+	S_ENTITLEMENT *item;
-+	if(cs_malloc(&item, sizeof(S_ENTITLEMENT)))
-+	{
-+
-+		// fill item
-+		item->caid = caid;
-+		item->provid = provid;
-+		item->id = 0;
-+		item->class = 0;
-+		item->start = 0;
-+		item->end = 2147472000;
-+		item->type = 0;
-+		item->isKey = 1;
-+		memcpy(item->name, keyName, 8);
-+		item->key = key;
-+		item->keyLength = keyLength;
-+		item->isData = isData;
-+
-+		//add item
-+		ll_append(rdr->ll_entitlements, item);
-+	}
-+}
-+
-+static uint8_t oneByte = 0x01;
-+
-+static void refresh_entitlements(struct s_reader *reader)
-+{
-+	uint32_t i;
-+	KeyData *tmpKeyData;
-+
-+	if(reader->ll_entitlements)
-+	{ ll_clear_data(reader->ll_entitlements); }
-+
-+	for(i=0; i<CwKeys.keyCount; i++)
-+		emu_add_entitlement(reader, CwKeys.EmuKeys[i].provider>>8, CwKeys.EmuKeys[i].provider&0xFF,
-+							CwKeys.EmuKeys[i].key, CwKeys.EmuKeys[i].keyName, CwKeys.EmuKeys[i].keyLength, 0);
-+
-+	for(i=0; i<ViKeys.keyCount; i++)
-+		emu_add_entitlement(reader, 0x500, ViKeys.EmuKeys[i].provider, ViKeys.EmuKeys[i].key, ViKeys.EmuKeys[i].keyName,
-+							ViKeys.EmuKeys[i].keyLength, 0);
-+
-+	for(i=0; i<NagraKeys.keyCount; i++)
-+		emu_add_entitlement(reader, 0x1801, NagraKeys.EmuKeys[i].provider, NagraKeys.EmuKeys[i].key, NagraKeys.EmuKeys[i].keyName,
-+							NagraKeys.EmuKeys[i].keyLength, 0);
-+
-+	for(i=0; i<IrdetoKeys.keyCount; i++) {
-+		tmpKeyData = &IrdetoKeys.EmuKeys[i];
-+		do {
-+			emu_add_entitlement(reader, tmpKeyData->provider>>8, tmpKeyData->provider&0xFF, tmpKeyData->key, tmpKeyData->keyName, tmpKeyData->keyLength, 0);
-+			tmpKeyData = tmpKeyData->nextKey;
-+		}
-+		while(tmpKeyData!= NULL);
-+	}
-+
-+	for(i=0; i<NDSKeys.keyCount; i++)
-+	{ emu_add_entitlement(reader, NDSKeys.EmuKeys[i].provider, 0, NDSKeys.EmuKeys[i].key, NDSKeys.EmuKeys[i].keyName, NDSKeys.EmuKeys[i].keyLength, 0); }
-+
-+	emu_add_entitlement(reader, 0x090F, 0, viasat_const, "00", 64, 1);
-+	emu_add_entitlement(reader, 0x093E, 0, viasat_const, "00", 64, 1);
-+
-+	for(i=0; i<BissKeys.keyCount; i++)
-+	{ emu_add_entitlement(reader, 0x2600, BissKeys.EmuKeys[i].provider, BissKeys.EmuKeys[i].key, BissKeys.EmuKeys[i].keyName, BissKeys.EmuKeys[i].keyLength, 0); }
-+
-+	emu_add_entitlement(reader, 0xFFFF, 0, &oneByte, "00", 1, 1);
-+	
-+	for(i=0; i<PowervuKeys.keyCount; i++)
-+		emu_add_entitlement(reader, 0x0E00, PowervuKeys.EmuKeys[i].provider, PowervuKeys.EmuKeys[i].key, PowervuKeys.EmuKeys[i].keyName,
-+							PowervuKeys.EmuKeys[i].keyLength, 0);
-+	
-+	for(i=0; i<DreKeys.keyCount; i++)
-+		emu_add_entitlement(reader, 0x4AE1, DreKeys.EmuKeys[i].provider, DreKeys.EmuKeys[i].key, DreKeys.EmuKeys[i].keyName,
-+							DreKeys.EmuKeys[i].keyLength, 0);
-+
-+	for(i=0; i<TandbergKeys.keyCount; i++)
-+		emu_add_entitlement(reader, 0x1010, TandbergKeys.EmuKeys[i].provider, TandbergKeys.EmuKeys[i].key, TandbergKeys.EmuKeys[i].keyName,
-+							TandbergKeys.EmuKeys[i].keyLength, 0);
-+}
-+
-+extern char cs_confdir[128];
-+
-+static void set_hexserial_to_version(struct s_reader *rdr)
-+{
-+	char cVersion[32];
-+	
-+	uint32_t version = GetOSemuVersion();
-+	uint8_t hversion[2];
-+	memset(hversion, 0, 2);
-+	snprintf(cVersion, sizeof(cVersion), "%04d", version);
-+	CharToBin(hversion, cVersion, 4);
-+	rdr->hexserial[3] = hversion[0];
-+	rdr->hexserial[4] = hversion[1];	
-+}
-+
-+static void set_prids(struct s_reader *rdr)
-+{
-+	int32_t i, j;
-+
-+	rdr->nprov = 0;
-+	
-+	for(i = 0; (i < rdr->emu_auproviders.nfilts) && (rdr->nprov < CS_MAXPROV); i++)
-+	{
-+		for(j = 0; (j < rdr->emu_auproviders.filts[i].nprids) && (rdr->nprov < CS_MAXPROV); j++)
-+		{
-+			i2b_buf(4, rdr->emu_auproviders.filts[i].prids[j], rdr->prid[i]);
-+			rdr->nprov++;
-+		}
-+	}
-+}
-+
-+FILTER* get_emu_prids_for_caid(struct s_reader *rdr, uint16_t caid)
-+{
-+	int32_t i;
-+	
-+	for(i = 0; i < rdr->emu_auproviders.nfilts; i++)
-+	{
-+		if(caid == rdr->emu_auproviders.filts[i].caid)
-+		{
-+			return &rdr->emu_auproviders.filts[i];
-+		}
-+	}
-+	
-+	return NULL;
-+}
-+
-+static int32_t EMU_Init(struct s_reader *reader)
-+{
-+	int32_t i;
-+	char authtmp[128];
-+	char keyStr[EMU_MAX_CHAR_KEYNAME];
-+	
-+	if(stream_server_thread_init == 0)
-+	{
-+		stream_server_thread_init = 1;
-+
-+		SAFE_MUTEX_INIT(&emu_fixed_key_srvid_mutex, NULL);
-+
-+		for(i=0; i<EMU_STREAM_SERVER_MAX_CONNECTIONS; i++)
-+		{
-+			SAFE_MUTEX_INIT(&emu_fixed_key_data_mutex[i], NULL);
-+			ll_emu_stream_delayed_keys[i] = ll_create("ll_emu_stream_delayed_keys");
-+			memset(&emu_fixed_key_data[i], 0, sizeof(emu_stream_client_key_data));
-+		}
-+		
-+		start_thread("stream_key_delayer", stream_key_delayer, NULL, NULL, 1, 1);
-+			
-+		cs_strncpy(emu_stream_source_host, cfg.emu_stream_source_host, sizeof(emu_stream_source_host));
-+		emu_stream_source_port = cfg.emu_stream_source_port;
-+		emu_stream_relay_port = cfg.emu_stream_relay_port;
-+		emu_stream_emm_enabled = cfg.emu_stream_emm_enabled;
-+		
-+		if(cfg.emu_stream_source_auth_user && cfg.emu_stream_source_auth_password)
-+		{
-+			snprintf(authtmp, sizeof(authtmp), "%s:%s", cfg.emu_stream_source_auth_user, cfg.emu_stream_source_auth_password);
-+			b64encode(authtmp, strlen(authtmp), &emu_stream_source_auth);
-+		}
-+		else
-+		{
-+			NULLFREE(emu_stream_source_auth);
-+		}
-+
-+		start_thread("stream_server", stream_server, NULL, NULL, 1, 1);
-+	}
-+	
-+	set_hexserial_to_version(reader);
-+	
-+#if !defined(__APPLE__) && !defined(__ANDROID__)
-+	read_emu_keymemory();
-+#endif
-+
-+	set_emu_keyfile_path(cs_confdir);
-+
-+	if(!read_emu_keyfile(cs_confdir))
-+	{
-+		if(read_emu_keyfile("/var/keys/"))
-+		{
-+			set_emu_keyfile_path("/var/keys/");
-+		}
-+	}
-+	
-+	if(reader->des_key_length >= 128)
-+	{
-+		for(i=0; i<16; i++)
-+		{
-+			snprintf(keyStr, EMU_MAX_CHAR_KEYNAME, "%X", i);
-+			
-+			SetKey('D', 0, keyStr, reader->des_key + (i*8), 8, 0, NULL);
-+		}
-+	}
-+
-+	ReaderInstanceData idata;
-+	idata.extee36 = reader->extee36;
-+	idata.extee56 = reader->extee56;
-+	idata.ee36 = reader->ee36;
-+	idata.ee56 = reader->ee56;
-+	idata.dre36_force_group = reader->dre36_force_group;
-+	idata.dre56_force_group = reader->dre56_force_group;
-+	
-+	DrecryptSetEmuExtee(&idata);
-+
-+	refresh_entitlements(reader);
-+
-+	set_prids(reader);
-+	
-+	return CR_OK;
-+}
-+
-+static int32_t EMU_GetStatus(struct s_reader *UNUSED(reader), int32_t *in) { *in = 1; return CR_OK; }
-+static int32_t EMU_Activate(struct s_reader *UNUSED(reader), struct s_ATR *UNUSED(atr)) { return CR_OK; }
-+static int32_t EMU_Transmit(struct s_reader *UNUSED(reader), uint8_t *UNUSED(buffer), uint32_t UNUSED(size),
-+							uint32_t UNUSED(expectedlen), uint32_t UNUSED(delay), uint32_t UNUSED(timeout)) { return CR_OK; }
-+static int32_t EMU_Receive(struct s_reader *UNUSED(reader), uint8_t *UNUSED(buffer), uint32_t UNUSED(size),
-+						   uint32_t UNUSED(delay), uint32_t UNUSED(timeout)) { return CR_OK; }
-+static int32_t EMU_Close(struct s_reader *UNUSED(reader)) { return CR_OK; }
-+static int32_t EMU_write_settings(struct s_reader *UNUSED(reader), struct s_cardreader_settings *UNUSED(s)) { return CR_OK; }
-+static int32_t EMU_card_write(struct s_reader *UNUSED(pcsc_reader),const uchar *UNUSED(buf) ,uint8_t *UNUSED(cta_res),
-+							  uint16_t *UNUSED(cta_lr),int32_t UNUSED(l)) { return CR_OK; }
-+static int32_t EMU_set_protocol(struct s_reader *UNUSED(rdr),uint8_t *UNUSED(params),uint32_t *UNUSED(length),
-+								uint32_t UNUSED(len_request)) { return CR_OK; }
-+
-+const struct s_cardreader cardreader_emu =
-+{
-+	.desc           = "emu",
-+	.typ            = R_EMU,
-+	.skip_extra_atr_parsing = 1,
-+	.reader_init    = EMU_Init,
-+	.get_status     = EMU_GetStatus,
-+	.activate       = EMU_Activate,
-+	.transmit       = EMU_Transmit,
-+	.receive        = EMU_Receive,
-+	.close          = EMU_Close,
-+	.write_settings = EMU_write_settings,
-+	.card_write     = EMU_card_write,
-+	.set_protocol   = EMU_set_protocol,
-+};
-+
-+void add_emu_reader(void)
-+{
-+	LL_ITER itr;
-+	struct s_reader *rdr;
-+	int8_t haveEmuReader = 0;
-+	char *emuName = "emulator";
-+	char *ctab, *ftab, *emu_auproviders;
-+
-+	itr = ll_iter_create(configured_readers);
-+	while((rdr = ll_iter_next(&itr)))
-+	{
-+		if(rdr->typ == R_EMU) {
-+			haveEmuReader = 1;
-+			break;
-+		}
-+	}
-+
-+	rdr = NULL;
-+
-+	if(!haveEmuReader) {
-+		if(!cs_malloc(&rdr, sizeof(struct s_reader))) { return; }
-+		reader_set_defaults(rdr);
-+
-+		rdr->enable = 1;
-+		rdr->typ = R_EMU;
-+		strncpy(rdr->label, emuName, strlen(emuName));
-+		strncpy(rdr->device, emuName, strlen(emuName));
-+
-+		ctab = strdup("090F,0500,1801,0604,2600,FFFF,0E00,4AE1,1010");
-+		chk_caidtab(ctab, &rdr->ctab);
-+		NULLFREE(ctab);
-+		
-+		ftab = strdup(
-+						"090F:000000;"
-+						"0500:000000,023800,021110,007400,007800;"
-+						"1801:000000,007301,001101,002111;"
-+						"0604:000000;"
-+						"2600:000000;"
-+						"FFFF:000000;"
-+						"0E00:000000;"
-+						"4AE1:000011,000014,0000FE;"
-+						"1010:000000;"
-+						);
-+		
-+		chk_ftab(ftab, &rdr->ftab);
-+		NULLFREE(ftab);
-+
-+		emu_auproviders = strdup("0604:010200;0E00:000000;4AE1:000011,000014,0000FE;1010:000000;");
-+		chk_ftab(emu_auproviders, &rdr->emu_auproviders);
-+		NULLFREE(emu_auproviders);
-+
-+		rdr->cachemm = 2;
-+		rdr->rewritemm = 1;
-+		rdr->logemm = 2;
-+		rdr->deviceemm = 1;
-+
-+		rdr->grp = 0x1ULL;
-+
-+		rdr->crdr = &cardreader_emu;
-+
-+		reader_fixups_fn(rdr);
-+		ll_append(configured_readers, rdr);
-+	}
-+
-+#ifdef HAVE_DVBAPI
-+	if(cfg.dvbapi_enabled && cfg.dvbapi_delayer < 60) {
-+		cfg.dvbapi_delayer = 60;
-+	}
-+#endif
-+
-+	cs_log("[Emu] oscam-emu version %d", GetOSemuVersion());
-+}
---- module-emulator-osemu.c	1970-01-01 01:00:00.000000000 +0100
-+++ module-emulator-osemu.c	2016-12-29 22:02:39.931750391 +0100
-@@ -0,0 +1,4707 @@
+Index: module-emulator-osemu.c
+===================================================================
+--- module-emulator-osemu.c	(Revision 0)
++++ module-emulator-osemu.c	(Arbeitskopie)
+@@ -0,0 +1,4894 @@
 +#include "globals.h"
 +#include "ffdecsa/ffdecsa.h"
 +#include "cscrypt/bn.h"
@@ -4055,7 +3255,7 @@
 +// Version info
 +uint32_t GetOSemuVersion(void)
 +{
-+	return atoi("$Version: 732 $"+10);
++	return atoi("$Version: 733 $"+10);
 +}
 +
 +// Key DB
@@ -7480,11 +6680,48 @@
 +		
 +		switch(nanoType)
 +		{
++			case 0xED: // ECM_TAG_CW_DESCRIPTOR
++			{
++				if(nanoLength != 0x26)
++				{
++					cs_log("[Emu] warning: nanoType ED length (%d) != %d", nanoLength, 0x26);
++					break;
++				}
++				
++				entitlementId = b2i(4, nanoData);
++				
++				if(!GetTandbergKey(ecmKey, entitlementId))
++				{
++					return 2;
++				}
++				
++				uint8_t encryptedData[32] = { 0 };
++				memcpy(encryptedData, nanoData + 4, 32);
++				
++				uint8_t iv[8] = { 0 };
++				des_cbc_decrypt(encryptedData, iv, ecmKey, 32);
++				
++				dw[0] = encryptedData[0x05];
++				dw[1] = encryptedData[0x19];
++				dw[2] = encryptedData[0x1D];
++				dw[4] = encryptedData[0x0B];
++				dw[5] = encryptedData[0x12];
++				dw[6] = encryptedData[0x1A];
++				dw[8] = encryptedData[0x16];
++				dw[9] = encryptedData[0x03];
++				dw[10] = encryptedData[0x11];
++				dw[12] = encryptedData[0x18];
++				dw[13] = encryptedData[0x10];
++				dw[14] = encryptedData[0x0E];
++				
++				return 0;
++			}
++			
 +			case 0xEE: // ECM_TAG_CW_DESCRIPTOR
 +			{
 +				if(nanoLength != 0x16)
 +				{
-+					cs_log("[Emu] warning: ECM_TAG_CW_DESCRIPTOR length (%d) != %d", nanoLength, 0x16);
++					cs_log("[Emu] warning: nanoType EE length (%d) != %d", nanoLength, 0x16);
 +					break;
 +				}
 +				
@@ -7507,7 +6744,8 @@
 +			}
 +			
 +			default:
-+				break;
++				cs_log("WARNING: nanoType %.2X not supported", nanoType);
++			break;
 +		}
 +		
 +		pos += 2 + nanoLength;
@@ -8488,27 +7726,80 @@
 +}
 +
 +// Tandberg EMM EMU
-+static int8_t GetTandbergEMMKey(uint8_t *buf, uint16_t keyIndex, uint8_t isCriticalKey)
++static uint8_t MixTable[] =
 +{
-+	return FindKey('T', keyIndex, 0, "MK", buf, 8, isCriticalKey, 0, 0, NULL);
++	0x12,0x78,0x4B,0x19,0x13,0x80,0x2F,0x84,
++	0x86,0x4C,0x09,0x53,0x15,0x79,0x6B,0x49,
++	0x10,0x4D,0x33,0x43,0x18,0x37,0x83,0x38,
++	0x82,0x1B,0x6E,0x24,0x2A,0x85,0x3C,0x3D,
++	0x5A,0x58,0x55,0x5D,0x20,0x41,0x65,0x51,
++	0x0C,0x45,0x63,0x7F,0x0F,0x46,0x21,0x7C,
++	0x2C,0x61,0x7E,0x0A,0x42,0x57,0x35,0x16,
++	0x87,0x3B,0x4F,0x40,0x34,0x22,0x26,0x74,
++	0x32,0x69,0x44,0x7A,0x6A,0x6D,0x0D,0x56,
++	0x23,0x2B,0x5C,0x72,0x76,0x36,0x28,0x25,
++	0x2E,0x52,0x5B,0x6C,0x7D,0x30,0x0B,0x5E,
++	0x47,0x1F,0x7B,0x31,0x3E,0x11,0x77,0x1E,
++	0x60,0x75,0x54,0x27,0x50,0x17,0x70,0x59,
++	0x1A,0x2D,0x4A,0x67,0x3A,0x5F,0x68,0x08,
++	0x4E,0x3F,0x29,0x6F,0x81,0x71,0x39,0x64,
++	0x48,0x66,0x73,0x14,0x0E,0x1D,0x62,0x1C
++};
++
++void TandbergRotateBytes(unsigned char *in, int n)
++{
++	if(n > 1)
++	{
++		unsigned char *e = in + n - 1;
++		do
++		{
++			unsigned char temp = *in;
++			*in++ = *e;
++			*e-- = temp;
++		}
++		while (in < e);
++	}
++}
++
++static void TandbergECMKeyDecrypt(uint8_t* emmKey, uint8_t* tagData, uint8_t* ecmKey)
++{
++	TandbergRotateBytes(emmKey, 8);
++	uint8_t iv[8] = { 0 };
++	uint8_t* payLoad = tagData + 4 + 5;
++	des_cbc_decrypt(payLoad, iv, emmKey, 16);
++
++	ecmKey[0] = payLoad[0x0F];
++	ecmKey[1] = payLoad[0x01];
++	ecmKey[2] = payLoad[0x0B];
++	ecmKey[3] = payLoad[0x03];
++	ecmKey[4] = payLoad[0x0E];
++	ecmKey[5] = payLoad[0x04];
++	ecmKey[6] = payLoad[0x0A];
++	ecmKey[7] = payLoad[0x08];
++}
++
++static int8_t GetTandbergEMMKey(uint8_t *buf, uint16_t keyIndex, uint8_t isCriticalKey, const char *keySet)
++{
++	return FindKey('T', keyIndex, 0, keySet, buf, 8, isCriticalKey, 0, 0, NULL);
 +}
 +
 +static int8_t TandbergParseEMMNanoTags(uint8_t* data, uint32_t length, uint8_t keyIndex, uint32_t *keysAdded)
 +{
 +	uint8_t tagType, tagLength, blockIndex;
 +	uint32_t pos = 0, entitlementId;
-+	int32_t i;
++	int32_t i, k;
 +	uint32_t ks[32];
 +	uint8_t* tagData;
 +	uint8_t emmKey[8];
 +	char keyValue[17];
++	uint8_t tagDataDecrypted[0x10][8];
 +	
 +	if(length < 2)
 +	{
 +		return 1;
 +	}
 +	
-+	while (pos < length)
++	while(pos < length)
 +	{
 +		tagType = data[pos];
 +		tagLength = data[pos+1]; 
@@ -8522,65 +7813,161 @@
 +	
 +		switch(tagType)
 +		{
-+		case 0xE4: // EMM_TAG_SECURITY_TABLE_DESCRIPTOR
-+		{	
-+			if(tagLength != 0x82)
++			case 0xE4: // EMM_TAG_SECURITY_TABLE_DESCRIPTOR (ram emm keys)
 +			{
-+				cs_log("[Emu] warning: EMM_TAG_SECURITY_TABLE_DESCRIPTOR length (%d) != %d", tagLength, 0x82);
++				uint8_t tagMode = data[pos + 2];
++						
++				switch(tagMode)
++				{
++					case 0x01: // keySet 01 new
++					{
++						if(tagLength != 0x8A)
++						{
++							cs_log("[Emu] warning: nanoTag E4 length (%d) != %d", tagLength, 0x8A);
++							break;
++						}
++						
++						if(!GetTandbergEMMKey(emmKey, keyIndex, 1, "MK01")) // read rom MK Set 01
++						{
++							break;
++						}
++						
++						uint8_t iv[8] = { 0 };
++						uint8_t* tagPayload = tagData + 2;
++						des_cbc_decrypt(tagPayload, iv, emmKey, 136);
++					
++						for (k = 0; k < 0x10; k++)  //loop 0x10 keys
++						{
++							for (i = 0; i < 8; i++)  //loop 8 bytes of key
++							{
++								tagDataDecrypted[k][i] = tagPayload[MixTable[8*k + i]];
++							}
++						}
++						
++						blockIndex = tagData[1] & 0x03;
++						
++						for(i = 0; i < 0x10; i++)
++						{
++							SetKey('T', (blockIndex << 4) + i, "MK01", tagDataDecrypted[i], 8, 0, NULL); // write ram MK Set 01
++						}
++					}
++					break;
++					
++					case 0xFF: // keySet FF (00) old
++					{
++						if(tagLength != 0x82)
++						{
++							cs_log("[Emu] warning: nanoTag E4 length (%d) != %d", tagLength, 0x82);
++							break;
++						}
++					
++						blockIndex = tagData[1] & 0x03;
++						
++  						if(!GetTandbergEMMKey(emmKey, keyIndex, 1, "MK")) // read rom MK Set 00
++  						{
++  							break;
++  						}
++						
++						des_set_key(emmKey, ks);
++						
++						for(i = 0; i < 0x10; i++)
++						{
++							des(tagData + 2 + (i*8), ks, 0);
++						}
++						
++						for(i = 0; i < 0x10; i++)
++						{
++							SetKey('T', (blockIndex << 4) + i, "MK", tagData + 2 + (i*8), 8, 0, NULL); // write ram MK Set 00
++						}
++					}
++					break;
++					
++					default:
++						cs_log("[Emu] warning: nanoTag E4 mode %.2X not supported", tagMode);
++					break;
++				}
 +				break;
 +			}
-+			
-+			blockIndex = tagData[1] & 0x03;
-+
-+  		if(!GetTandbergEMMKey(emmKey, keyIndex, 1))
-+  		{
-+  			break;
-+  		}
-+
-+			des_set_key(emmKey, ks);
-+			
-+			for(i = 0; i < 0x10; i++)
-+			{
-+				des(tagData + 2 + (i*8), ks, 0);
-+			}
-+			
-+			for(i = 0; i < 0x10; i++)
-+			{
-+				SetKey('T', (blockIndex << 4) + i, "MK", tagData + 2 + (i*8), 8, 0, NULL);
-+			}
-+			
-+			break;
-+		}
 +		
-+		case 0xE1: // EMM_TAG_EVENT_ENTITLEMENT_DESCRIPTOR
-+		{
-+			if(tagLength != 0x12)
++			case 0xE1: // EMM_TAG_EVENT_ENTITLEMENT_DESCRIPTOR (ecm keys)
 +			{
-+				cs_log("[Emu] warning: EMM_TAG_EVENT_ENTITLEMENT_DESCRIPTOR length (%d) != %d", tagLength, 0x12);
++				uint8_t tagMode = data[pos + 2 + 4];
++				
++				switch(tagMode)
++				{
++					case 0x00: // ecm keys from mode FF (00) - keySet 00
++					{
++						if(tagLength != 0x12)
++						{
++							cs_log("[Emu] warning: nanoTag E1 length (%d) != %d", tagLength, 0x12);
++							break;
++						}
++						
++						entitlementId = b2i(4, tagData);
++			
++  						if(!GetTandbergEMMKey(emmKey, keyIndex, 1, "MK"))
++  						{
++  							break;
++  						}
++						
++						des_set_key(emmKey, ks);
++						des(tagData + 4 + 5, ks, 0);
++						
++						if((tagData + 4 + 5 + 7) != 0x00) // check if key looks valid (last byte 0x00)
++						{
++							break;
++						}
++  						
++						if(UpdateKey('T', entitlementId, "01", tagData + 4 + 5, 8, 1, NULL))
++						{
++							(*keysAdded)++;
++							cs_hexdump(0, tagData + 4 + 5, 8, keyValue, sizeof(keyValue));
++							cs_log("[Emu] Key found in EMM: T %.8X 01 %s", entitlementId, keyValue);
++						}
++					}
++					break;
++
++					case 0x01: // ecm keys from mode 01 - keySet 01
++					{
++						if(tagLength != 0x1A)
++						{
++							cs_log("[Emu] warning: nanoTag E1 length (%d) != %d", tagLength, 0x1A);
++							break;
++						}
++						
++						entitlementId = b2i(4, tagData);
++						
++  						if(!GetTandbergEMMKey(emmKey, keyIndex, 1, "MK01"))
++  						{
++  							break;
++  						}
++  						
++  						uint8_t ecmKey[8] = { 0 };
++  						TandbergECMKeyDecrypt(emmKey, tagData, ecmKey);
++  						
++						if(ecmKey[7] != 0x00) // check if key looks valid (last byte 0x00)
++						{
++							break;
++						}
++  						
++						if(UpdateKey('T', entitlementId, "01", ecmKey, 8, 1, NULL))
++						{
++							(*keysAdded)++;
++							cs_hexdump(0, ecmKey, 8, keyValue, sizeof(keyValue));
++							cs_log("[Emu] Key found in EMM: T %.8X 01 %s", entitlementId, keyValue);
++						}
++					}
++					break;
++					
++					default:
++						cs_log("[Emu] warning: nanoTag E1 mode %.2X not supported", tagMode);
++					break;
++				}
 +				break;
 +			}
-+			
-+			entitlementId = b2i(4, tagData);
-+			
-+  		if(!GetTandbergEMMKey(emmKey, keyIndex, 1))
-+  		{
-+  			break;
-+  		}
-+			
-+			des_set_key(emmKey, ks);
-+			des(tagData + 4 + 5, ks, 0);
-+			
-+			if(UpdateKey('T', entitlementId, "01", tagData + 4 + 5, 8, 1, NULL))
-+			{
-+				(*keysAdded)++;
-+				cs_hexdump(0, tagData + 4 + 5, 8, keyValue, sizeof(keyValue));
-+				cs_log("[Emu] Key found in EMM: T %.8X 01 %s", entitlementId, keyValue);
-+			}
-+			
-+			break;
-+		}
-+		
-+		default:
++
++			default:
++				cs_log("[Emu] warning: nanoTag %.2X not supported", tagType);
 +			break;
 +		}
 +		
@@ -8730,8 +8117,10 @@
 +
 +	return result;
 +}
---- module-emulator-osemu.h	1970-01-01 01:00:00.000000000 +0100
-+++ module-emulator-osemu.h	2016-12-29 22:02:39.931750391 +0100
+Index: module-emulator-osemu.h
+===================================================================
+--- module-emulator-osemu.h	(Revision 0)
++++ module-emulator-osemu.h	(Arbeitskopie)
 @@ -0,0 +1,141 @@
 +#include "globals.h"
 +#include "module-emulator-stream.h"
@@ -8874,8 +8263,10 @@
 +#endif
 +  
 +#endif
---- module-emulator-stream.c	1970-01-01 01:00:00.000000000 +0100
-+++ module-emulator-stream.c	2016-12-29 22:02:39.931750391 +0100
+Index: module-emulator-stream.c
+===================================================================
+--- module-emulator-stream.c	(Revision 0)
++++ module-emulator-stream.c	(Arbeitskopie)
 @@ -0,0 +1,1103 @@
 +#include "globals.h"
 +#include "cscrypt/des.h"
@@ -9980,8 +9371,10 @@
 +	shutdown(glistenfd, 2);
 +	close(glistenfd);	
 +}
---- module-emulator-stream.h	1970-01-01 01:00:00.000000000 +0100
-+++ module-emulator-stream.h	2016-12-29 22:02:39.931750391 +0100
+Index: module-emulator-stream.h
+===================================================================
+--- module-emulator-stream.h	(Revision 0)
++++ module-emulator-stream.h	(Arbeitskopie)
 @@ -0,0 +1,75 @@
 +#ifndef EMU_STREAM_SERVER_H_
 +#define EMU_STREAM_SERVER_H_
@@ -10058,8 +9451,903 @@
 +#endif
 +
 +#endif
---- module-newcamd.c	2016-12-29 22:01:37.000000000 +0100
-+++ module-newcamd.c	2016-12-29 22:02:39.931750391 +0100
+Index: module-emulator.c
+===================================================================
+--- module-emulator.c	(Revision 0)
++++ module-emulator.c	(Arbeitskopie)
+@@ -0,0 +1,844 @@
++#include "globals.h"
++#include "oscam-string.h"
++#include "oscam-config.h"
++#include "oscam-conf-chk.h"
++#include "oscam-time.h"
++#include "module-emulator-osemu.h"
++#include "module-emulator-stream.h"
++
++// oscam virtual emu card reader
++#define CS_OK      1
++#define CS_ERROR   0
++
++static int32_t emu_do_ecm(struct s_reader *rdr, const struct ecm_request_t *er, struct s_ecm_answer *ea)
++{
++	ReaderInstanceData idata;
++	idata.extee36 = rdr->extee36;
++	idata.extee56 = rdr->extee56;
++	idata.ee36 = rdr->ee36;
++	idata.ee56 = rdr->ee56;
++	idata.dre36_force_group = rdr->dre36_force_group;
++	idata.dre56_force_group = rdr->dre56_force_group;
++	
++	if (!ProcessECM(er->ecmlen, er->caid, er->prid, er->ecm, ea->cw, er->srvid, er->pid, &ea->cw_ex, &idata)) {
++		return CS_OK;
++	}
++
++	return CS_ERROR;
++}
++
++static void refresh_entitlements(struct s_reader *reader);
++
++static int32_t emu_do_emm(struct s_reader *rdr, struct emm_packet_t *emm)
++{
++	uint32_t keysAdded = 0;
++
++	if(emm->emmlen < 3) {
++		return CS_ERROR;
++	}
++
++	if(SCT_LEN(emm->emm) > emm->emmlen) {
++		return CS_ERROR;
++	}
++
++	ReaderInstanceData idata;
++	idata.extee36 = rdr->extee36;
++	idata.extee56 = rdr->extee56;
++	idata.ee36 = rdr->ee36;
++	idata.ee56 = rdr->ee56;
++	idata.dre36_force_group = rdr->dre36_force_group;
++	idata.dre56_force_group = rdr->dre56_force_group;
++	
++	if(!ProcessEMM(b2i(2, emm->caid), b2i(4, emm->provid), emm->emm, &idata, &keysAdded)) {
++		if(keysAdded > 0) { refresh_entitlements(rdr); }
++		return CS_OK;
++	}
++
++	return CS_ERROR;
++}
++
++static int32_t EMU_Init(struct s_reader *reader);
++
++static int32_t emu_card_info(struct s_reader *rdr) {
++	EMU_Init(rdr);
++	return CS_OK;
++}
++
++static int32_t emu_card_init(struct s_reader *UNUSED(rdr), struct s_ATR *UNUSED(atr))
++{return CS_ERROR;}
++
++static int32_t emu_get_emm_filter(struct s_reader *UNUSED(rdr), struct s_csystem_emm_filter **UNUSED(emm_filters), unsigned int *UNUSED(filter_count))
++{return CS_ERROR;}
++
++
++int32_t emu_get_via3_emm_type(EMM_PACKET *ep, struct s_reader *rdr)
++{
++	uint32_t provid = 0;
++
++	if(ep->emm[3] == 0x90 && ep->emm[4] == 0x03)
++	{
++		provid = b2i(3, ep->emm+5);
++		provid &=0xFFFFF0; 
++		i2b_buf(4, provid, ep->provid);
++	}
++
++	switch(ep->emm[0])
++	{
++	case 0x88:
++		ep->type = UNIQUE;
++		memset(ep->hexserial, 0, 8);
++		memcpy(ep->hexserial, ep->emm + 4, 4);
++		rdr_log_dbg(rdr, D_EMM, "UNIQUE");
++		return 1;
++
++	case 0x8A:
++	case 0x8B:
++		ep->type = GLOBAL;
++		rdr_log_dbg(rdr, D_EMM, "GLOBAL");
++		return 1;
++
++	case 0x8C:
++	case 0x8D:
++		ep->type = SHARED;
++		rdr_log_dbg(rdr, D_EMM, "SHARED (part)");
++		// We need those packets to pass otherwise we would never
++		// be able to complete EMM reassembly
++		return 1;
++
++	case 0x8E:
++		ep->type = SHARED;
++		rdr_log_dbg(rdr, D_EMM, "SHARED");
++		memset(ep->hexserial, 0, 8);
++		memcpy(ep->hexserial, ep->emm + 3, 3);
++		return 1;
++
++	default:
++		ep->type = UNKNOWN;
++		rdr_log_dbg(rdr, D_EMM, "UNKNOWN");
++		return 1;
++	}
++}
++
++int32_t emu_get_ird2_emm_type(EMM_PACKET *ep, struct s_reader *rdr)
++{
++	int32_t l = (ep->emm[3] & 0x07);
++	int32_t base = (ep->emm[3] >> 3);
++	char dumprdrserial[l * 3], dumpemmserial[l * 3];
++
++	switch(l)
++	{
++
++	case 0:
++		// global emm, 0 bytes addressed
++		ep->type = GLOBAL;
++		rdr_log_dbg(rdr, D_EMM, "GLOBAL base = %02x", base);
++		return 1;
++
++	case 2:
++		// shared emm, 2 bytes addressed
++		ep->type = SHARED;
++		memset(ep->hexserial, 0, 8);
++		memcpy(ep->hexserial, ep->emm + 4, l);
++		cs_hexdump(1, rdr->hexserial, l, dumprdrserial, sizeof(dumprdrserial));
++		cs_hexdump(1, ep->hexserial, l, dumpemmserial, sizeof(dumpemmserial));
++		rdr_log_dbg_sensitive(rdr, D_EMM, "SHARED l = %d ep = {%s} rdr = {%s} base = %02x", l,
++								 dumpemmserial, dumprdrserial, base);
++		return 1;
++
++	case 3:
++		// unique emm, 3 bytes addressed
++		ep->type = UNIQUE;
++		memset(ep->hexserial, 0, 8);
++		memcpy(ep->hexserial, ep->emm + 4, l);
++		cs_hexdump(1, rdr->hexserial, l, dumprdrserial, sizeof(dumprdrserial));
++		cs_hexdump(1, ep->hexserial, l, dumpemmserial, sizeof(dumpemmserial));
++		rdr_log_dbg_sensitive(rdr, D_EMM, "UNIQUE l = %d ep = {%s} rdr = {%s} base = %02x", l,
++								 dumpemmserial, dumprdrserial, base);
++		return 1;
++
++	default:
++		ep->type = UNKNOWN;
++		rdr_log_dbg(rdr, D_EMM, "UNKNOWN");
++		return 1;
++	}
++}
++
++int32_t emu_get_pvu_emm_type(EMM_PACKET *ep, struct s_reader *rdr)
++{
++	if(ep->emm[0] == 0x82)
++	{
++		ep->type = UNIQUE;
++		memset(ep->hexserial, 0, 8);
++		memcpy(ep->hexserial, ep->emm + 12, 4);
++	}
++	else
++	{
++		ep->type = UNKNOWN;
++		rdr_log_dbg(rdr, D_EMM, "UNKNOWN");
++	}
++	return 1;	
++}
++
++int32_t emu_get_dre2_emm_type(EMM_PACKET *ep, struct s_reader *UNUSED(rdr))
++{
++	if(ep->emm[0] == 0x91)
++	{
++		ep->type = GLOBAL;
++		return 1;
++	}
++	else if(ep->emm[0] == 0x82)
++	{
++		ep->type = GLOBAL;
++		return 1;
++	}
++	else
++	{
++		switch(ep->emm[0])
++		{
++		case 0x86:
++			ep->type = SHARED;
++			memset(ep->hexserial, 0, 8);
++			ep->hexserial[0] = ep->emm[3];
++			return 1;
++
++			//case 0x87:
++			//	ep->type = UNIQUE;
++			//	return 1; //FIXME: no filling of ep->hexserial
++			
++			case 0x88:
++				ep->type = UNIQUE;
++				return 1; //FIXME: no filling of ep->hexserial
++    	
++		default:
++			ep->type = UNKNOWN;
++			return 1;
++		}
++	}
++}
++
++int32_t emu_get_tan_emm_type(EMM_PACKET *ep, struct s_reader *rdr)
++{
++	if(ep->emm[0] == 0x82 || ep->emm[0] == 0x83)
++	{
++		ep->type = GLOBAL;
++	}
++	else
++	{
++		ep->type = UNKNOWN;
++		rdr_log_dbg(rdr, D_EMM, "UNKNOWN");
++	}
++	return 1;	
++}
++
++static int32_t emu_get_emm_type(struct emm_packet_t *ep, struct s_reader *rdr)
++{
++	switch(b2i(2, ep->caid)>>8)
++	{
++		case 0x05:
++			return emu_get_via3_emm_type(ep, rdr);
++
++		case 0x06:
++			return emu_get_ird2_emm_type(ep, rdr);
++			
++		case 0x0E:
++			return emu_get_pvu_emm_type(ep, rdr);
++	
++		case 0x4A:
++			return emu_get_dre2_emm_type(ep, rdr);
++	
++		case 0x10:
++			return emu_get_tan_emm_type(ep, rdr);
++				
++		default:
++			break;
++	}
++	
++	return CS_ERROR;
++}
++
++static int32_t emu_get_via3_emm_filter(struct s_reader *UNUSED(rdr), struct s_csystem_emm_filter **emm_filters, unsigned int *filter_count, uint16_t UNUSED(caid), uint32_t UNUSED(provid))
++{
++	if(*emm_filters == NULL)
++	{
++		const unsigned int max_filter_count = 1;
++		
++		if(!cs_malloc(emm_filters, max_filter_count * sizeof(struct s_csystem_emm_filter)))
++			{ return CS_ERROR; }
++
++		struct s_csystem_emm_filter *filters = *emm_filters;
++		*filter_count = 0;
++
++		int32_t idx = 0;
++
++		filters[idx].type = EMM_GLOBAL;
++		filters[idx].enabled   = 1;
++		filters[idx].filter[0] = 0x8A;
++		filters[idx].mask[0]   = 0xFE;
++		filters[idx].filter[3] = 0x80; 
++		filters[idx].mask[3]   = 0x80;
++		idx++;
++
++		*filter_count = idx;
++	}	
++	
++	return CS_OK;
++}
++
++static int32_t emu_get_ird2_emm_filter(struct s_reader* rdr, struct s_csystem_emm_filter **emm_filters, unsigned int *filter_count, uint16_t caid, uint32_t UNUSED(provid))
++{
++	uint8_t hexserial[3], prid[4];
++	FILTER* emu_provids;
++	int8_t have_provid = 0, have_serial = 0;
++	int32_t i;
++	
++	if(GetIrdeto2Hexserial(caid, hexserial))
++		{ have_serial = 1; }
++
++	emu_provids = get_emu_prids_for_caid(rdr, caid);
++	if(emu_provids != NULL && emu_provids->nprids > 0)
++		{ have_provid = 1;}		
++
++	if(*emm_filters == NULL)
++	{
++		const unsigned int max_filter_count = have_serial + (2*(have_provid ? emu_provids->nprids : 0));
++		if(!cs_malloc(emm_filters, max_filter_count * sizeof(struct s_csystem_emm_filter)))
++			{ return CS_ERROR; }
++
++		struct s_csystem_emm_filter *filters = *emm_filters;
++		*filter_count = 0;
++
++		unsigned int idx = 0;
++
++		if(have_serial)
++		{
++			filters[idx].type = EMM_UNIQUE;
++			filters[idx].enabled   = 1;
++			filters[idx].filter[0] = 0x82;
++			filters[idx].mask[0]   = 0xFF;
++			filters[idx].filter[1] = 0xFB;
++			filters[idx].mask[1]   = 0x07;
++			memcpy(&filters[idx].filter[2], hexserial, 3);
++			memset(&filters[idx].mask[2], 0xFF, 3);
++			idx++;
++		}
++		
++		for(i=0; have_provid && i<emu_provids->nprids; i++)
++		{
++			i2b_buf(4, emu_provids->prids[i], prid);
++			
++			filters[idx].type = EMM_UNIQUE;
++			filters[idx].enabled   = 1;
++			filters[idx].filter[0] = 0x82;
++			filters[idx].mask[0]   = 0xFF;
++			filters[idx].filter[1] = 0xFB;
++			filters[idx].mask[1]   = 0x07;
++			memcpy(&filters[idx].filter[2], &prid[1], 3);
++			memset(&filters[idx].mask[2], 0xFF, 3);
++			idx++;
++        	
++			filters[idx].type = EMM_SHARED;
++			filters[idx].enabled   = 1;
++			filters[idx].filter[0] = 0x82;
++			filters[idx].mask[0]   = 0xFF;
++			filters[idx].filter[1] = 0xFA;
++			filters[idx].mask[1]   = 0x07;
++			memcpy(&filters[idx].filter[2], &prid[1], 2);
++			memset(&filters[idx].mask[2], 0xFF, 2);
++			idx++;
++		}
++
++		*filter_count = idx;
++	}
++
++	return CS_OK;
++}
++
++static int32_t emu_get_pvu_emm_filter(struct s_reader *UNUSED(rdr), struct s_csystem_emm_filter **emm_filters, unsigned int *filter_count, uint16_t UNUSED(caid), uint32_t UNUSED(provid), uint16_t srvid)
++{
++	uint8_t hexserials[16][4];
++	int32_t i, count = 0;
++	
++	if(!GetPowervuHexserials(srvid, hexserials, 16, &count))
++		{ return CS_ERROR; }
++	
++	if(*emm_filters == NULL)
++	{
++		const unsigned int max_filter_count = count;
++		if(!cs_malloc(emm_filters, max_filter_count * sizeof(struct s_csystem_emm_filter)))
++			{ return CS_ERROR; }
++
++		struct s_csystem_emm_filter *filters = *emm_filters;
++		*filter_count = 0;
++
++		int32_t idx = 0;
++
++		for(i=0; i<count; i++)
++		{
++			filters[idx].type = EMM_UNIQUE;
++			filters[idx].enabled   = 1;
++			filters[idx].filter[0] = 0x82;
++			filters[idx].filter[10] = hexserials[i][0];
++			filters[idx].filter[11] = hexserials[i][1];
++			filters[idx].filter[12] = hexserials[i][2];
++			filters[idx].filter[13] = hexserials[i][3];
++			filters[idx].mask[0]   = 0xFF;
++			filters[idx].mask[10]  = 0xFF;
++			filters[idx].mask[11]  = 0xFF;
++			filters[idx].mask[12]  = 0xFF;
++			filters[idx].mask[13]  = 0xFF;
++			idx++;
++		}
++
++		*filter_count = idx;
++	}
++
++	return CS_OK;
++}
++
++static int32_t emu_get_dre2_emm_filter(struct s_reader *UNUSED(rdr), struct s_csystem_emm_filter **emm_filters, unsigned int *filter_count, uint16_t caid, uint32_t provid)
++{
++	uint8_t hexserials[16];
++	int32_t i, count = 0;
++	
++	if(!GetDrecryptHexserials(caid, provid, hexserials, 16, &count))
++		{ count = 0; }
++	
++	if(*emm_filters == NULL)
++	{
++		const unsigned int max_filter_count = 1 + count + 1;
++		if(!cs_malloc(emm_filters, max_filter_count * sizeof(struct s_csystem_emm_filter)))
++			{ return CS_ERROR; }
++
++		struct s_csystem_emm_filter *filters = *emm_filters;
++		*filter_count = 0;
++
++		int32_t idx = 0;
++
++		if(provid == 0xFE)
++		{
++			filters[idx].type = EMM_GLOBAL;
++			filters[idx].enabled   = 1;
++			filters[idx].filter[0] = 0x91;
++			filters[idx].mask[0]   = 0xFF;
++			idx++;
++		}
++		
++		for(i=0; i<count; i++)
++		{
++			filters[idx].type = EMM_SHARED;
++			filters[idx].enabled   = 1;
++			filters[idx].filter[0] = 0x86;
++			filters[idx].filter[1] = hexserials[i];
++			filters[idx].mask[0]   = 0xFF;
++			filters[idx].mask[1]   = 0xFF;
++			idx++;
++		}
++		
++		//filters[idx].type = EMM_UNIQUE;
++		//filters[idx].enabled   = 1;
++		//filters[idx].filter[0] = 0x87;
++		//filters[idx].mask[0]   = 0xFF;
++		//idx++;
++		
++		filters[idx].type = EMM_UNIQUE;
++		filters[idx].enabled   = 1;
++		filters[idx].filter[0] = 0x88;
++		filters[idx].mask[0]   = 0xFF;
++		idx++;
++		
++		*filter_count = idx;
++	}
++
++	return CS_OK;
++}
++
++static int32_t emu_get_tan_emm_filter(struct s_reader *UNUSED(rdr), struct s_csystem_emm_filter **emm_filters, unsigned int *filter_count, uint16_t UNUSED(caid), uint32_t UNUSED(provid))
++{
++	if(*emm_filters == NULL)
++	{
++		const unsigned int max_filter_count = 2;
++		uint8_t buf[8];
++		
++		if(!FindKey('T', 0x40, 0, "MK", buf, 8, 0, 0, 0, NULL) && !FindKey('T', 0x40, 0, "MK01", buf, 8, 0, 0, 0, NULL))
++			{ return CS_ERROR; }
++		
++		if(!cs_malloc(emm_filters, max_filter_count * sizeof(struct s_csystem_emm_filter)))
++			{ return CS_ERROR; }
++
++		struct s_csystem_emm_filter *filters = *emm_filters;
++		*filter_count = 0;
++
++		int32_t idx = 0;
++
++		filters[idx].type = EMM_GLOBAL;
++		filters[idx].enabled   = 1;
++		filters[idx].filter[0] = 0x82;
++		filters[idx].mask[0]   = 0xFF;
++		idx++;
++
++		filters[idx].type = EMM_GLOBAL;
++		filters[idx].enabled   = 1;
++		filters[idx].filter[0] = 0x83;
++		filters[idx].mask[0]   = 0xFF;
++		idx++;
++
++		*filter_count = idx;
++	}	
++	
++	return CS_OK;
++}
++
++static int32_t emu_get_emm_filter_adv(struct s_reader *rdr, struct s_csystem_emm_filter **emm_filters, unsigned int *filter_count, uint16_t caid, uint32_t provid, uint16_t srvid)
++{
++	switch(caid>>8)
++	{
++		case 0x05:
++			return emu_get_via3_emm_filter(rdr, emm_filters, filter_count, caid, provid);
++
++		case 0x06:
++			return emu_get_ird2_emm_filter(rdr, emm_filters, filter_count, caid, provid);
++			
++		case 0x0E:
++			return emu_get_pvu_emm_filter(rdr, emm_filters, filter_count, caid, provid, srvid);
++			
++		case 0x4A:
++			return emu_get_dre2_emm_filter(rdr, emm_filters, filter_count, caid, provid);
++	
++		case 0x10:
++			return emu_get_tan_emm_filter(rdr, emm_filters, filter_count, caid, provid);
++		
++		default:
++			break;
++	}
++	
++	return CS_ERROR;
++}
++
++const struct s_cardsystem reader_emu =
++{
++	.desc = "emu",
++	.caids = (uint16_t[]){ 0x0D, 0x09, 0x0500, 0x18, 0x06, 0x26, 0xFFFF, 0x0E, 0x4A, 0x10, 0 },
++	.do_ecm = emu_do_ecm,
++	.do_emm = emu_do_emm,
++	.card_info = emu_card_info,
++	.card_init = emu_card_init,
++	.get_emm_type = emu_get_emm_type,
++	.get_emm_filter = emu_get_emm_filter, //needed to pass checks
++	.get_emm_filter_adv = emu_get_emm_filter_adv,
++};
++
++
++#define CR_OK 0
++#define CR_ERROR 1
++
++static void emu_add_entitlement(struct s_reader *rdr, uint16_t caid, uint32_t provid, uint8_t *key, char *keyName, uint32_t keyLength, uint8_t isData)
++{
++	if(!rdr->ll_entitlements) { rdr->ll_entitlements = ll_create("ll_entitlements"); }
++
++	S_ENTITLEMENT *item;
++	if(cs_malloc(&item, sizeof(S_ENTITLEMENT)))
++	{
++
++		// fill item
++		item->caid = caid;
++		item->provid = provid;
++		item->id = 0;
++		item->class = 0;
++		item->start = 0;
++		item->end = 2147472000;
++		item->type = 0;
++		item->isKey = 1;
++		memcpy(item->name, keyName, 8);
++		item->key = key;
++		item->keyLength = keyLength;
++		item->isData = isData;
++
++		//add item
++		ll_append(rdr->ll_entitlements, item);
++	}
++}
++
++static uint8_t oneByte = 0x01;
++
++static void refresh_entitlements(struct s_reader *reader)
++{
++	uint32_t i;
++	KeyData *tmpKeyData;
++
++	if(reader->ll_entitlements)
++	{ ll_clear_data(reader->ll_entitlements); }
++
++	for(i=0; i<CwKeys.keyCount; i++)
++		emu_add_entitlement(reader, CwKeys.EmuKeys[i].provider>>8, CwKeys.EmuKeys[i].provider&0xFF,
++							CwKeys.EmuKeys[i].key, CwKeys.EmuKeys[i].keyName, CwKeys.EmuKeys[i].keyLength, 0);
++
++	for(i=0; i<ViKeys.keyCount; i++)
++		emu_add_entitlement(reader, 0x500, ViKeys.EmuKeys[i].provider, ViKeys.EmuKeys[i].key, ViKeys.EmuKeys[i].keyName,
++							ViKeys.EmuKeys[i].keyLength, 0);
++
++	for(i=0; i<NagraKeys.keyCount; i++)
++		emu_add_entitlement(reader, 0x1801, NagraKeys.EmuKeys[i].provider, NagraKeys.EmuKeys[i].key, NagraKeys.EmuKeys[i].keyName,
++							NagraKeys.EmuKeys[i].keyLength, 0);
++
++	for(i=0; i<IrdetoKeys.keyCount; i++) {
++		tmpKeyData = &IrdetoKeys.EmuKeys[i];
++		do {
++			emu_add_entitlement(reader, tmpKeyData->provider>>8, tmpKeyData->provider&0xFF, tmpKeyData->key, tmpKeyData->keyName, tmpKeyData->keyLength, 0);
++			tmpKeyData = tmpKeyData->nextKey;
++		}
++		while(tmpKeyData!= NULL);
++	}
++
++	for(i=0; i<NDSKeys.keyCount; i++)
++	{ emu_add_entitlement(reader, NDSKeys.EmuKeys[i].provider, 0, NDSKeys.EmuKeys[i].key, NDSKeys.EmuKeys[i].keyName, NDSKeys.EmuKeys[i].keyLength, 0); }
++
++	emu_add_entitlement(reader, 0x090F, 0, viasat_const, "00", 64, 1);
++	emu_add_entitlement(reader, 0x093E, 0, viasat_const, "00", 64, 1);
++
++	for(i=0; i<BissKeys.keyCount; i++)
++	{ emu_add_entitlement(reader, 0x2600, BissKeys.EmuKeys[i].provider, BissKeys.EmuKeys[i].key, BissKeys.EmuKeys[i].keyName, BissKeys.EmuKeys[i].keyLength, 0); }
++
++	emu_add_entitlement(reader, 0xFFFF, 0, &oneByte, "00", 1, 1);
++	
++	for(i=0; i<PowervuKeys.keyCount; i++)
++		emu_add_entitlement(reader, 0x0E00, PowervuKeys.EmuKeys[i].provider, PowervuKeys.EmuKeys[i].key, PowervuKeys.EmuKeys[i].keyName,
++							PowervuKeys.EmuKeys[i].keyLength, 0);
++	
++	for(i=0; i<DreKeys.keyCount; i++)
++		emu_add_entitlement(reader, 0x4AE1, DreKeys.EmuKeys[i].provider, DreKeys.EmuKeys[i].key, DreKeys.EmuKeys[i].keyName,
++							DreKeys.EmuKeys[i].keyLength, 0);
++
++	for(i=0; i<TandbergKeys.keyCount; i++)
++		emu_add_entitlement(reader, 0x1010, TandbergKeys.EmuKeys[i].provider, TandbergKeys.EmuKeys[i].key, TandbergKeys.EmuKeys[i].keyName,
++							TandbergKeys.EmuKeys[i].keyLength, 0);
++}
++
++extern char cs_confdir[128];
++
++static void set_hexserial_to_version(struct s_reader *rdr)
++{
++	char cVersion[32];
++	
++	uint32_t version = GetOSemuVersion();
++	uint8_t hversion[2];
++	memset(hversion, 0, 2);
++	snprintf(cVersion, sizeof(cVersion), "%04d", version);
++	CharToBin(hversion, cVersion, 4);
++	rdr->hexserial[3] = hversion[0];
++	rdr->hexserial[4] = hversion[1];	
++}
++
++static void set_prids(struct s_reader *rdr)
++{
++	int32_t i, j;
++
++	rdr->nprov = 0;
++	
++	for(i = 0; (i < rdr->emu_auproviders.nfilts) && (rdr->nprov < CS_MAXPROV); i++)
++	{
++		for(j = 0; (j < rdr->emu_auproviders.filts[i].nprids) && (rdr->nprov < CS_MAXPROV); j++)
++		{
++			i2b_buf(4, rdr->emu_auproviders.filts[i].prids[j], rdr->prid[i]);
++			rdr->nprov++;
++		}
++	}
++}
++
++FILTER* get_emu_prids_for_caid(struct s_reader *rdr, uint16_t caid)
++{
++	int32_t i;
++	
++	for(i = 0; i < rdr->emu_auproviders.nfilts; i++)
++	{
++		if(caid == rdr->emu_auproviders.filts[i].caid)
++		{
++			return &rdr->emu_auproviders.filts[i];
++		}
++	}
++	
++	return NULL;
++}
++
++static int32_t EMU_Init(struct s_reader *reader)
++{
++	int32_t i;
++	char authtmp[128];
++	char keyStr[EMU_MAX_CHAR_KEYNAME];
++	
++	if(stream_server_thread_init == 0)
++	{
++		stream_server_thread_init = 1;
++
++		SAFE_MUTEX_INIT(&emu_fixed_key_srvid_mutex, NULL);
++
++		for(i=0; i<EMU_STREAM_SERVER_MAX_CONNECTIONS; i++)
++		{
++			SAFE_MUTEX_INIT(&emu_fixed_key_data_mutex[i], NULL);
++			ll_emu_stream_delayed_keys[i] = ll_create("ll_emu_stream_delayed_keys");
++			memset(&emu_fixed_key_data[i], 0, sizeof(emu_stream_client_key_data));
++		}
++		
++		start_thread("stream_key_delayer", stream_key_delayer, NULL, NULL, 1, 1);
++			
++		cs_strncpy(emu_stream_source_host, cfg.emu_stream_source_host, sizeof(emu_stream_source_host));
++		emu_stream_source_port = cfg.emu_stream_source_port;
++		emu_stream_relay_port = cfg.emu_stream_relay_port;
++		emu_stream_emm_enabled = cfg.emu_stream_emm_enabled;
++		
++		if(cfg.emu_stream_source_auth_user && cfg.emu_stream_source_auth_password)
++		{
++			snprintf(authtmp, sizeof(authtmp), "%s:%s", cfg.emu_stream_source_auth_user, cfg.emu_stream_source_auth_password);
++			b64encode(authtmp, strlen(authtmp), &emu_stream_source_auth);
++		}
++		else
++		{
++			NULLFREE(emu_stream_source_auth);
++		}
++
++		start_thread("stream_server", stream_server, NULL, NULL, 1, 1);
++	}
++	
++	set_hexserial_to_version(reader);
++	
++#if !defined(__APPLE__) && !defined(__ANDROID__)
++	read_emu_keymemory();
++#endif
++
++	set_emu_keyfile_path(cs_confdir);
++
++	if(!read_emu_keyfile(cs_confdir))
++	{
++		if(read_emu_keyfile("/var/keys/"))
++		{
++			set_emu_keyfile_path("/var/keys/");
++		}
++	}
++	
++	if(reader->des_key_length >= 128)
++	{
++		for(i=0; i<16; i++)
++		{
++			snprintf(keyStr, EMU_MAX_CHAR_KEYNAME, "%X", i);
++			
++			SetKey('D', 0, keyStr, reader->des_key + (i*8), 8, 0, NULL);
++		}
++	}
++
++	ReaderInstanceData idata;
++	idata.extee36 = reader->extee36;
++	idata.extee56 = reader->extee56;
++	idata.ee36 = reader->ee36;
++	idata.ee56 = reader->ee56;
++	idata.dre36_force_group = reader->dre36_force_group;
++	idata.dre56_force_group = reader->dre56_force_group;
++	
++	DrecryptSetEmuExtee(&idata);
++
++	refresh_entitlements(reader);
++
++	set_prids(reader);
++	
++	return CR_OK;
++}
++
++static int32_t EMU_GetStatus(struct s_reader *UNUSED(reader), int32_t *in) { *in = 1; return CR_OK; }
++static int32_t EMU_Activate(struct s_reader *UNUSED(reader), struct s_ATR *UNUSED(atr)) { return CR_OK; }
++static int32_t EMU_Transmit(struct s_reader *UNUSED(reader), uint8_t *UNUSED(buffer), uint32_t UNUSED(size),
++							uint32_t UNUSED(expectedlen), uint32_t UNUSED(delay), uint32_t UNUSED(timeout)) { return CR_OK; }
++static int32_t EMU_Receive(struct s_reader *UNUSED(reader), uint8_t *UNUSED(buffer), uint32_t UNUSED(size),
++						   uint32_t UNUSED(delay), uint32_t UNUSED(timeout)) { return CR_OK; }
++static int32_t EMU_Close(struct s_reader *UNUSED(reader)) { return CR_OK; }
++static int32_t EMU_write_settings(struct s_reader *UNUSED(reader), struct s_cardreader_settings *UNUSED(s)) { return CR_OK; }
++static int32_t EMU_card_write(struct s_reader *UNUSED(pcsc_reader),const uchar *UNUSED(buf) ,uint8_t *UNUSED(cta_res),
++							  uint16_t *UNUSED(cta_lr),int32_t UNUSED(l)) { return CR_OK; }
++static int32_t EMU_set_protocol(struct s_reader *UNUSED(rdr),uint8_t *UNUSED(params),uint32_t *UNUSED(length),
++								uint32_t UNUSED(len_request)) { return CR_OK; }
++
++const struct s_cardreader cardreader_emu =
++{
++	.desc           = "emu",
++	.typ            = R_EMU,
++	.skip_extra_atr_parsing = 1,
++	.reader_init    = EMU_Init,
++	.get_status     = EMU_GetStatus,
++	.activate       = EMU_Activate,
++	.transmit       = EMU_Transmit,
++	.receive        = EMU_Receive,
++	.close          = EMU_Close,
++	.write_settings = EMU_write_settings,
++	.card_write     = EMU_card_write,
++	.set_protocol   = EMU_set_protocol,
++};
++
++void add_emu_reader(void)
++{
++	LL_ITER itr;
++	struct s_reader *rdr;
++	int8_t haveEmuReader = 0;
++	char *emuName = "emulator";
++	char *ctab, *ftab, *emu_auproviders;
++
++	itr = ll_iter_create(configured_readers);
++	while((rdr = ll_iter_next(&itr)))
++	{
++		if(rdr->typ == R_EMU) {
++			haveEmuReader = 1;
++			break;
++		}
++	}
++
++	rdr = NULL;
++
++	if(!haveEmuReader) {
++		if(!cs_malloc(&rdr, sizeof(struct s_reader))) { return; }
++		reader_set_defaults(rdr);
++
++		rdr->enable = 1;
++		rdr->typ = R_EMU;
++		strncpy(rdr->label, emuName, strlen(emuName));
++		strncpy(rdr->device, emuName, strlen(emuName));
++
++		ctab = strdup("090F,0500,1801,0604,2600,FFFF,0E00,4AE1,1010");
++		chk_caidtab(ctab, &rdr->ctab);
++		NULLFREE(ctab);
++		
++		ftab = strdup(
++						"090F:000000;"
++						"0500:000000,023800,021110,007400,007800;"
++						"1801:000000,007301,001101,002111;"
++						"0604:000000;"
++						"2600:000000;"
++						"FFFF:000000;"
++						"0E00:000000;"
++						"4AE1:000011,000014,0000FE;"
++						"1010:000000;"
++						);
++		
++		chk_ftab(ftab, &rdr->ftab);
++		NULLFREE(ftab);
++
++		emu_auproviders = strdup("0604:010200;0E00:000000;4AE1:000011,000014,0000FE;1010:000000;");
++		chk_ftab(emu_auproviders, &rdr->emu_auproviders);
++		NULLFREE(emu_auproviders);
++
++		rdr->cachemm = 2;
++		rdr->rewritemm = 1;
++		rdr->logemm = 2;
++		rdr->deviceemm = 1;
++
++		rdr->grp = 0x1ULL;
++
++		rdr->crdr = &cardreader_emu;
++
++		reader_fixups_fn(rdr);
++		ll_append(configured_readers, rdr);
++	}
++
++#ifdef HAVE_DVBAPI
++	if(cfg.dvbapi_enabled && cfg.dvbapi_delayer < 60) {
++		cfg.dvbapi_delayer = 60;
++	}
++#endif
++
++	cs_log("[Emu] oscam-emu version %d", GetOSemuVersion());
++}
+Index: module-newcamd-des.c
+===================================================================
+--- module-newcamd-des.c	(Revision 11297)
++++ module-newcamd-des.c	(Arbeitskopie)
+@@ -5,10 +5,7 @@
+ #define DES_IP              1
+ #define DES_IP_1            2
+ #define DES_RIGHT           4
+-#define DES_HASH            8
+ 
+-#define DES_ECM_CRYPT       0
+-#define DES_ECM_HASH        DES_HASH
+ #define DES_ECS2_DECRYPT    (DES_IP | DES_IP_1 | DES_RIGHT)
+ #define DES_ECS2_CRYPT      (DES_IP | DES_IP_1)
+ 
+@@ -356,7 +353,7 @@
+ 	swap(data - 4, data);
+ }
+ 
+-static void nc_des(unsigned char key[], unsigned char mode, unsigned char data[])
++void nc_des(unsigned char key[], unsigned char mode, unsigned char data[])
+ {
+ 	unsigned char i;
+ 	unsigned char left[8];
+Index: module-newcamd-des.h
+===================================================================
+--- module-newcamd-des.h	(Revision 11297)
++++ module-newcamd-des.h	(Arbeitskopie)
+@@ -1,8 +1,15 @@
+ #ifndef MODULE_NEWCAMD_DES_H_
+ #define MODULE_NEWCAMD_DES_H_
+ 
++#define DES_HASH            8
++
++#define DES_ECM_CRYPT       0
++#define DES_ECM_HASH        DES_HASH
++
+ 	int nc_des_encrypt(unsigned char *buffer, int len, unsigned char *deskey);
+ 	int nc_des_decrypt(unsigned char *buffer, int len, unsigned char *deskey);
+ 	unsigned char *nc_des_login_key_get(unsigned char *key1, unsigned char *key2, int len, unsigned char *des16);
+ 
++	void nc_des(unsigned char key[], unsigned char mode, unsigned char data[]);
++
+ #endif
+Index: module-newcamd.c
+===================================================================
+--- module-newcamd.c	(Revision 11297)
++++ module-newcamd.c	(Arbeitskopie)
 @@ -919,6 +919,13 @@
  			// set userfilter for au enabled clients
  			if(aureader)
@@ -10130,48 +10418,10 @@
  					if(!found)
  					{
  						mbuf[22 + 11 * j] = 0x00;
---- module-newcamd-des.c	2016-12-29 22:01:38.000000000 +0100
-+++ module-newcamd-des.c	2016-12-29 22:02:39.931750391 +0100
-@@ -5,10 +5,7 @@
- #define DES_IP              1
- #define DES_IP_1            2
- #define DES_RIGHT           4
--#define DES_HASH            8
- 
--#define DES_ECM_CRYPT       0
--#define DES_ECM_HASH        DES_HASH
- #define DES_ECS2_DECRYPT    (DES_IP | DES_IP_1 | DES_RIGHT)
- #define DES_ECS2_CRYPT      (DES_IP | DES_IP_1)
- 
-@@ -356,7 +353,7 @@
- 	swap(data - 4, data);
- }
- 
--static void nc_des(unsigned char key[], unsigned char mode, unsigned char data[])
-+void nc_des(unsigned char key[], unsigned char mode, unsigned char data[])
- {
- 	unsigned char i;
- 	unsigned char left[8];
---- module-newcamd-des.h	2016-12-29 22:01:38.000000000 +0100
-+++ module-newcamd-des.h	2016-12-29 22:02:39.931750391 +0100
-@@ -1,8 +1,15 @@
- #ifndef MODULE_NEWCAMD_DES_H_
- #define MODULE_NEWCAMD_DES_H_
- 
-+#define DES_HASH            8
-+
-+#define DES_ECM_CRYPT       0
-+#define DES_ECM_HASH        DES_HASH
-+
- 	int nc_des_encrypt(unsigned char *buffer, int len, unsigned char *deskey);
- 	int nc_des_decrypt(unsigned char *buffer, int len, unsigned char *deskey);
- 	unsigned char *nc_des_login_key_get(unsigned char *key1, unsigned char *key2, int len, unsigned char *des16);
- 
-+	void nc_des(unsigned char key[], unsigned char mode, unsigned char data[]);
-+
- #endif
---- module-stat.c	2016-12-29 22:01:37.000000000 +0100
-+++ module-stat.c	2016-12-29 22:02:39.931750391 +0100
+Index: module-stat.c
+===================================================================
+--- module-stat.c	(Revision 11297)
++++ module-stat.c	(Arbeitskopie)
 @@ -903,7 +903,7 @@
  
  uint16_t get_rdr_caid(struct s_reader *rdr)
@@ -10190,27 +10440,44 @@
  			{
  				prv = ea;
  				continue; // proxy can convert or reject
---- module-webif.c	2016-12-29 22:01:37.000000000 +0100
-+++ module-webif.c	2016-12-29 22:04:37.395749570 +0100
-@@ -98,6 +98,7 @@
- #define MNU_CFG_LCD			14
+Index: module-webif-tpl.c
+===================================================================
+--- module-webif-tpl.c	(Revision 11297)
++++ module-webif-tpl.c	(Arbeitskopie)
+@@ -457,6 +457,7 @@
+ 											check_conf(WITH_SSL, ptr2);
+ 											check_conf(WITH_STAPI, ptr2);
+ 											check_conf(WITH_STAPI5, ptr2);
++											check_conf(WITH_EMU, ptr2);
+ 										} // for
+ 										if(ok == 0)
+ 										{
+Index: module-webif.c
+===================================================================
+--- module-webif.c	(Revision 11297)
++++ module-webif.c	(Arbeitskopie)
+@@ -99,6 +99,8 @@
  #define MNU_CFG_MONITOR		15
  #define MNU_CFG_WEBIF		16
-+#define MNU_CFG_STREAMRELAY 17
  
++#define MNU_CFG_STREAMRELAY	17
++
  /* constants for files.html submenuactivating */
  #define MNU_CFG_FVERSION	0
-@@ -130,7 +131,8 @@
- #define MNU_GBX_FSMSLOG     24
- #define MNU_GBX_FSMSACK     25
- #define MNU_GBX_FSMSNACK    26
--#define MNU_CFG_TOTAL_ITEMS 27 // sum of items above. Use it for "All inactive" in function calls too.
-+#define MNU_CFG_FSOFTCAMKEY 27
-+#define MNU_CFG_TOTAL_ITEMS 28 // sum of items above. Use it for "All inactive" in function calls too.
+ #define MNU_CFG_FCONF		1
+@@ -129,8 +131,10 @@
+ #define MNU_GBX_FSMSACK     	25
+ #define MNU_GBX_FSMSNACK    	26
  
- #else
- #define MNU_CFG_TOTAL_ITEMS 19 // sum of items above. Use it for "All inactive" in function calls too.
-@@ -1088,6 +1090,34 @@
+-#define MNU_CFG_TOTAL_ITEMS 	27 // sum of items above. Use it for "All inactive" in function calls too.
++#define MNU_CFG_FSOFTCAMKEY	27
+ 
++#define MNU_CFG_TOTAL_ITEMS 	28 // sum of items above. Use it for "All inactive" in function calls too.
++
+ static void set_status_info_var(struct templatevars *vars, char *varname, int no_data, char *fmt, double value) {
+ 	if (no_data)
+ 		tpl_addVar(vars, TPLADD, varname, "N/A");
+@@ -1082,6 +1086,34 @@
  }
  #endif
  
@@ -10245,7 +10512,7 @@
  #ifdef MODULE_CCCAM
  static char *send_oscam_config_cccam(struct templatevars *vars, struct uriparams *params)
  {
-@@ -1503,6 +1533,9 @@
+@@ -1497,6 +1529,9 @@
  #ifdef MODULE_SCAM
  	else if(!strcmp(part, "scam")) { return send_oscam_config_scam(vars, params); }
  #endif
@@ -10255,7 +10522,7 @@
  #ifdef MODULE_CCCAM
  	else if(!strcmp(part, "cccam")) { return send_oscam_config_cccam(vars, params); }
  #endif
-@@ -1965,7 +1998,7 @@
+@@ -1959,7 +1994,7 @@
  		chk_reader("services", servicelabels, rdr);
  		chk_reader("lb_whitelist_services", servicelabelslb, rdr);
  
@@ -10264,7 +10531,7 @@
  		{
  			restart_cardreader(rdr, 1);
  		}
-@@ -2538,6 +2571,21 @@
+@@ -2532,6 +2567,21 @@
  	tpl_addVar(vars, TPLADD, "USERSCRIPT", rdr->userscript);
  #endif
  
@@ -10286,7 +10553,7 @@
  	tpl_addVar(vars, TPLADD, "PROTOCOL", reader_get_type_desc(rdr, 0));
  
  	// Show only parameters which needed for the reader
-@@ -2559,6 +2607,9 @@
+@@ -2553,6 +2603,9 @@
  	case R_CAMD35 :
  		tpl_addVar(vars, TPLAPPEND, "READERDEPENDINGCONFIG", tpl_getTpl(vars, "READERCONFIGCAMD35BIT"));
  		break;
@@ -10296,7 +10563,7 @@
  	case R_CS378X :
  		tpl_addVar(vars, TPLAPPEND, "READERDEPENDINGCONFIG", tpl_getTpl(vars, "READERCONFIGCS378XBIT"));
  		break;
-@@ -4282,9 +4333,38 @@
+@@ -4276,9 +4329,38 @@
  
  					tpl_addVar(vars, TPLAPPEND, "LOGHISTORY", "<BR><BR>New Structure:<BR>");
  					char tbuffer[83];
@@ -10335,7 +10602,7 @@
  						localtime_r(&item->start, &start_t);
  						localtime_r(&item->end, &end_t);
  
-@@ -4760,6 +4840,9 @@
+@@ -4754,6 +4836,9 @@
  #else
  						filtered = (type == cl->typ);
  #endif
@@ -10345,7 +10612,7 @@
  					}
  				}
  
-@@ -6201,6 +6284,9 @@
+@@ -6195,6 +6280,9 @@
  		{ "gsms.ack",        MNU_GBX_FSMSACK,   FTYPE_GBOX },     // id 25
  		{ "gsms.nack",       MNU_GBX_FSMSNACK,  FTYPE_GBOX },     // id 26
  #endif
@@ -10355,7 +10622,7 @@
  		{ NULL, 0, 0 },
  	};
  
-@@ -6671,7 +6757,7 @@
+@@ -6665,7 +6753,7 @@
  		else if(!proxy && rdr->csystem_active)     // local active reader
  		{
  			csystem = rdr->csystem;
@@ -10364,7 +10631,7 @@
  		}
  
  		if(csystem)
-@@ -7676,8 +7762,8 @@
+@@ -7670,8 +7758,8 @@
  		memcpy(*result + bufsize, buf2, n);
  		bufsize += n;
  
@@ -10375,70 +10642,10 @@
  		{
  			cs_log("error: too much data received from %s", cs_inet_ntoa(in));
  			NULLFREE(*result);
---- module-webif-tpl.c	2016-12-29 22:01:37.000000000 +0100
-+++ module-webif-tpl.c	2016-12-29 22:02:39.931750391 +0100
-@@ -457,6 +457,7 @@
- 											check_conf(WITH_SSL, ptr2);
- 											check_conf(WITH_STAPI, ptr2);
- 											check_conf(WITH_STAPI5, ptr2);
-+											check_conf(WITH_EMU, ptr2);
- 										} // for
- 										if(ok == 0)
- 										{
---- oscam.c	2016-12-29 22:01:38.000000000 +0100
-+++ oscam.c	2016-12-29 22:02:39.931750391 +0100
-@@ -41,6 +41,11 @@
- #include "reader-common.h"
- #include "module-gbox.h"
- 
-+#ifdef WITH_EMU
-+	void add_emu_reader(void);
-+	void stop_stream_server(void);
-+#endif
-+
- #ifdef WITH_SSL
- #include <openssl/crypto.h>
- #include <openssl/ssl.h>
-@@ -419,6 +424,7 @@
- 	write_conf(CW_CYCLE_CHECK, "CW Cycle Check support");
- 	write_conf(LCDSUPPORT, "LCD support");
- 	write_conf(LEDSUPPORT, "LED support");
-+	write_conf(WITH_EMU, "Emulator support");
- 	switch (cs_getclocktype()) {
- 		case CLOCK_TYPE_UNKNOWN  : write_conf(CLOCKFIX, "Clockfix with UNKNOWN clock"); break;
- 		case CLOCK_TYPE_REALTIME : write_conf(CLOCKFIX, "Clockfix with realtime clock"); break;
-@@ -1637,6 +1643,9 @@
- #ifdef CARDREADER_STINGER
- 	&cardreader_stinger,
- #endif
-+#ifdef WITH_EMU
-+	&cardreader_emu,
-+#endif
- 	NULL
- };
- 
-@@ -1808,6 +1817,9 @@
- 
- 	init_sidtab();
- 	init_readerdb();
-+#ifdef WITH_EMU
-+	add_emu_reader();
-+#endif	
- 	cfg.account = init_userdb();
- 	init_signal();
- 	init_provid();
-@@ -1891,6 +1903,9 @@
- 	SAFE_COND_SIGNAL(&reader_check_sleep_cond); // Stop reader_check thread
- 
- 	// Cleanup
-+#ifdef WITH_EMU
-+	stop_stream_server();
-+#endif
- #ifdef MODULE_GBOX	
- 	stop_sms_sender();
- #endif
---- oscam-chk.c	2016-12-29 22:01:37.000000000 +0100
-+++ oscam-chk.c	2016-12-29 22:02:39.931750391 +0100
+Index: oscam-chk.c
+===================================================================
+--- oscam-chk.c	(Revision 11297)
++++ oscam-chk.c	(Arbeitskopie)
 @@ -736,7 +736,7 @@
  		return 0;
  	}
@@ -10475,8 +10682,10 @@
  	{
  		return 1; //reader caid is not real caid
  	}
---- oscam-config-global.c	2016-12-29 22:01:37.000000000 +0100
-+++ oscam-config-global.c	2016-12-29 22:02:39.931750391 +0100
+Index: oscam-config-global.c
+===================================================================
+--- oscam-config-global.c	(Revision 11297)
++++ oscam-config-global.c	(Arbeitskopie)
 @@ -812,6 +812,30 @@
  #else
  static const struct config_list scam_opts[] = { DEF_LAST_OPT };
@@ -10516,28 +10725,10 @@
  	{ "dvbapi",	dvbapi_opts },
  	{ "monitor",	monitor_opts },
  	{ "webif",	webif_opts },
---- oscam-config.h	2016-12-29 22:01:37.000000000 +0100
-+++ oscam-config.h	2016-12-29 22:02:39.931750391 +0100
-@@ -22,6 +22,7 @@
- int32_t free_readerdb(void);
- int32_t write_server(void);
- void    reload_readerdb(void);
-+void reader_fixups_fn(void *var);
- 
- void    chk_sidtab(char *token, char *value, struct s_sidtab *sidtab);
- int32_t init_sidtab(void);
-@@ -60,7 +61,8 @@
- 	FTAB_PROVID  = 0x04,
- 	FTAB_CHID    = 0x08,
- 	FTAB_FBPCAID = 0x10,
--	FTAB_LOCALCARDS = 0x20
-+	FTAB_LOCALCARDS = 0x20,
-+	FTAB_EMUAU  = 0x40	
- };
- 
- void ftab_fn(const char *token, char *value, void *setting, long ftab_type, FILE *f);
---- oscam-config-reader.c	2016-12-29 22:01:37.000000000 +0100
-+++ oscam-config-reader.c	2016-12-29 22:02:39.931750391 +0100
+Index: oscam-config-reader.c
+===================================================================
+--- oscam-config-reader.c	(Revision 11297)
++++ oscam-config-reader.c	(Arbeitskopie)
 @@ -109,6 +109,7 @@
  			{ "newcamd525", R_NEWCAMD },
  			{ "newcamd524", R_NEWCAMD },
@@ -10579,8 +10770,32 @@
  	DEF_OPT_INT8("deprecated"           , OFS(deprecated),              0),
  	DEF_OPT_INT8("audisabled"           , OFS(audisabled),              0),
  	DEF_OPT_FUNC("auprovid"             , 0,                            auprovid_fn),
---- oscam-ecm.c	2016-12-29 22:01:37.000000000 +0100
-+++ oscam-ecm.c	2016-12-29 22:02:39.931750391 +0100
+Index: oscam-config.h
+===================================================================
+--- oscam-config.h	(Revision 11297)
++++ oscam-config.h	(Arbeitskopie)
+@@ -22,6 +22,7 @@
+ int32_t free_readerdb(void);
+ int32_t write_server(void);
+ void    reload_readerdb(void);
++void reader_fixups_fn(void *var);
+ 
+ void    chk_sidtab(char *token, char *value, struct s_sidtab *sidtab);
+ int32_t init_sidtab(void);
+@@ -60,7 +61,8 @@
+ 	FTAB_PROVID  = 0x04,
+ 	FTAB_CHID    = 0x08,
+ 	FTAB_FBPCAID = 0x10,
+-	FTAB_LOCALCARDS = 0x20
++	FTAB_LOCALCARDS = 0x20,
++	FTAB_EMUAU  = 0x40	
+ };
+ 
+ void ftab_fn(const char *token, char *value, void *setting, long ftab_type, FILE *f);
+Index: oscam-ecm.c
+===================================================================
+--- oscam-ecm.c	(Revision 11297)
++++ oscam-ecm.c	(Arbeitskopie)
 @@ -1578,7 +1578,7 @@
  
  	if(reader && cw && rc < E_NOTFOUND)
@@ -10590,8 +10805,10 @@
  		{
  			for(i = 0; i < 16; i += 4)
  			{
---- oscam-emm.c	2016-12-29 22:01:37.000000000 +0100
-+++ oscam-emm.c	2016-12-29 22:02:39.931750391 +0100
+Index: oscam-emm.c
+===================================================================
+--- oscam-emm.c	(Revision 11297)
++++ oscam-emm.c	(Arbeitskopie)
 @@ -50,7 +50,14 @@
  	unsigned int j, filter_count = 0;
  
@@ -10633,8 +10850,10 @@
  	if(prid == provid)
  	{
  		rdr_log_dbg(reader, D_EMM, "reader auprovid = %06X matching with emm provid = %06X -> SEND!", prid, provid);
---- oscam-string.c	2016-12-29 22:01:38.000000000 +0100
-+++ oscam-string.c	2016-12-29 22:02:39.931750391 +0100
+Index: oscam-string.c
+===================================================================
+--- oscam-string.c	(Revision 11297)
++++ oscam-string.c	(Arbeitskopie)
 @@ -510,6 +510,62 @@
  	return crc ^ 0xffffffffL;
  }
@@ -10698,8 +10917,10 @@
  static uint16_t ccitt_crc_table [256] =
  {
  	0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5,
---- oscam-string.h	2016-12-29 22:01:38.000000000 +0100
-+++ oscam-string.h	2016-12-29 22:02:39.931750391 +0100
+Index: oscam-string.h
+===================================================================
+--- oscam-string.h	(Revision 11297)
++++ oscam-string.h	(Arbeitskopie)
 @@ -37,6 +37,7 @@
  void get_random_bytes(uint8_t *dst, uint32_t dst_len);
  
@@ -10708,8 +10929,64 @@
  uint16_t ccitt_crc(uint8_t *data, size_t length, uint16_t seed, uint16_t final);
  uint32_t jhash(const char *key, size_t len);
  
---- reader-common.c	2016-12-29 22:01:37.000000000 +0100
-+++ reader-common.c	2016-12-29 22:02:39.931750391 +0100
+Index: oscam.c
+===================================================================
+--- oscam.c	(Revision 11297)
++++ oscam.c	(Arbeitskopie)
+@@ -41,6 +41,11 @@
+ #include "reader-common.h"
+ #include "module-gbox.h"
+ 
++#ifdef WITH_EMU
++	void add_emu_reader(void);
++	void stop_stream_server(void);
++#endif
++
+ #ifdef WITH_SSL
+ #include <openssl/crypto.h>
+ #include <openssl/ssl.h>
+@@ -419,6 +424,7 @@
+ 	write_conf(CW_CYCLE_CHECK, "CW Cycle Check support");
+ 	write_conf(LCDSUPPORT, "LCD support");
+ 	write_conf(LEDSUPPORT, "LED support");
++	write_conf(WITH_EMU, "Emulator support");
+ 	switch (cs_getclocktype()) {
+ 		case CLOCK_TYPE_UNKNOWN  : write_conf(CLOCKFIX, "Clockfix with UNKNOWN clock"); break;
+ 		case CLOCK_TYPE_REALTIME : write_conf(CLOCKFIX, "Clockfix with realtime clock"); break;
+@@ -1637,6 +1643,9 @@
+ #ifdef CARDREADER_STINGER
+ 	&cardreader_stinger,
+ #endif
++#ifdef WITH_EMU
++	&cardreader_emu,
++#endif
+ 	NULL
+ };
+ 
+@@ -1808,6 +1817,9 @@
+ 
+ 	init_sidtab();
+ 	init_readerdb();
++#ifdef WITH_EMU
++	add_emu_reader();
++#endif	
+ 	cfg.account = init_userdb();
+ 	init_signal();
+ 	init_provid();
+@@ -1891,6 +1903,9 @@
+ 	SAFE_COND_SIGNAL(&reader_check_sleep_cond); // Stop reader_check thread
+ 
+ 	// Cleanup
++#ifdef WITH_EMU
++	stop_stream_server();
++#endif
+ #ifdef MODULE_GBOX	
+ 	stop_sms_sender();
+ #endif
+Index: reader-common.c
+===================================================================
+--- reader-common.c	(Revision 11297)
++++ reader-common.c	(Arbeitskopie)
 @@ -14,6 +14,7 @@
  #include "reader-common.h"
  //#include "csctapi/atr.h"
@@ -10738,8 +11015,10 @@
  	for(i = 0; cardsystems[i]; i++)
  	{
  		NULLFREE(reader->csystem_data);
---- readers.h	2016-12-29 22:01:37.000000000 +0100
-+++ readers.h	2016-12-29 22:02:39.931750391 +0100
+Index: readers.h
+===================================================================
+--- readers.h	(Revision 11297)
++++ readers.h	(Arbeitskopie)
 @@ -16,5 +16,6 @@
  extern const struct s_cardsystem reader_bulcrypt;
  extern const struct s_cardsystem reader_griffin;
@@ -10747,8 +11026,10 @@
 +extern const struct s_cardsystem reader_emu;
  
  #endif
---- webif/config/dvbapi.html	2016-12-29 22:01:37.000000000 +0100
-+++ webif/config/dvbapi.html	2016-12-29 22:02:39.931750391 +0100
+Index: webif/config/dvbapi.html
+===================================================================
+--- webif/config/dvbapi.html	(Revision 11297)
++++ webif/config/dvbapi.html	(Arbeitskopie)
 @@ -53,7 +53,7 @@
  			</TD>
  		</TR>
@@ -10758,31 +11039,37 @@
  			<TD>
  				<select name="extended_cw_api">
  					<option value="0" ##EXTENDEDCWAPISELECTED0##>0 - none (disabled)</option>
---- webif/config/menu.html	2016-12-29 22:01:37.000000000 +0100
-+++ webif/config/menu.html	2016-12-29 22:06:13.643748897 +0100
-@@ -3,7 +3,7 @@
- 			<LI CLASS="##CMENUACTIVE0##"><A HREF="config.html?part=global">Global</A></LI>
- ##TPLCONFIGMENUANTICASC##	<!-- CMENUACTIVE1 -->
- 			<LI CLASS="##CMENUACTIVE2##"><A HREF="config.html?part=cache">Cache##TPLCMCAPTIONCWC##</A></LI>
--##TPLCONFIGMENULB##			<!-- CMENUACTIVE3 -->
-+##TPLCONFIGMENULB##		<!-- CMENUACTIVE3 -->
- ##TPLCONFIGMENUCAMD33##		<!-- CMENUACTIVE4 -->
- ##TPLCONFIGMENUCAMD35##		<!-- CMENUACTIVE5 -->
- ##TPLCONFIGMENUCAMD35TCP##	<!-- CMENUACTIVE6 -->
+@@ -61,4 +61,4 @@
+ 					<option value="2" ##EXTENDEDCWAPISELECTED2##>2 - OE2.0</option>
+ 				</select>
+ 			</TD>
+-		</TR> -->			
+\ No newline at end of file
++		</TR>		
+\ No newline at end of file
+Index: webif/config/menu.html
+===================================================================
+--- webif/config/menu.html	(Revision 11297)
++++ webif/config/menu.html	(Arbeitskopie)
 @@ -16,6 +16,7 @@
  ##TPLCONFIGMENUDVBAPI##		<!-- CMENUACTIVE13 -->
  ##TPLCONFIGMENULCD##		<!-- CMENUACTIVE14 -->
  ##TPLCONFIGMENUMONITOR##	<!-- CMENUACTIVE15 -->
-+##TPLCONFIGMENUSTREAMRELAY##	<!-- CMENUACTIVE17 -->
++##TPLCONFIGMENUSTREAMRELAY##<!-- CMENUACTIVE17 -->
  			<LI CLASS="##CMENUACTIVE16##"><A HREF="config.html?part=webif">WebIf</A></LI>
  	</UL>
  </DIV>
---- webif/config/menu_streamrelay.html	1970-01-01 01:00:00.000000000 +0100
-+++ webif/config/menu_streamrelay.html	2016-12-29 22:02:39.935750391 +0100
+\ No newline at end of file
+Index: webif/config/menu_streamrelay.html
+===================================================================
+--- webif/config/menu_streamrelay.html	(Revision 0)
++++ webif/config/menu_streamrelay.html	(Arbeitskopie)
 @@ -0,0 +1 @@
 +			<LI CLASS="##CMENUACTIVE17##"><A HREF="config.html?part=streamrelay">Stream Relay</A></LI>
---- webif/config/streamrelay.html	1970-01-01 01:00:00.000000000 +0100
-+++ webif/config/streamrelay.html	2016-12-29 22:02:39.935750391 +0100
+Index: webif/config/streamrelay.html
+===================================================================
+--- webif/config/streamrelay.html	(Revision 0)
++++ webif/config/streamrelay.html	(Arbeitskopie)
 @@ -0,0 +1,25 @@
 +		<input name="part" type="hidden" value="streamrelay">
 +		<TABLE CLASS="config">
@@ -10809,67 +11096,38 @@
 +					</select>
 +				</TD>
 +			</TR>
---- webif/files/menu.html	2016-12-29 22:01:37.000000000 +0100
-+++ webif/files/menu.html	2016-12-29 22:02:39.935750391 +0100
-@@ -21,6 +21,7 @@
- ##VIEW_FILEMENUCSS##	<!-- CMENUACTIVE16 -->
- ##TPLFILEMENUTWIN##	<!-- CMENUACTIVE17 -->
- ##TPLFILEMENUCONSTCW##  <!-- CMENUACTIVE18 -->
-+##TPLFILEMENUSOFTCAMKEY## <!-- CMENUACTIVE19 -->
+\ No newline at end of file
+Index: webif/files/menu.html
+===================================================================
+--- webif/files/menu.html	(Revision 11297)
++++ webif/files/menu.html	(Arbeitskopie)
+@@ -10,7 +10,7 @@
+ 		<LI CLASS="##CMENUACTIVE7##"><A HREF="files.html?file=logfile">logfile</A></LI>
+ 		<LI CLASS="##CMENUACTIVE8##"><A HREF="files.html?file=userfile">userfile</A></LI>
+ ##TPLFILEMENUGBOX##		<!-- CMENUACTIVE19-26 -->
+-		<LI CLASS="##CMENUACTIVE9## ##CMENUACTIVE10## ##CMENUACTIVE11## ##CMENUACTIVE12## ##CMENUACTIVE13## ##CMENUACTIVE14## ##CMENUACTIVE15## ##CMENUACTIVE16## ##CMENUACTIVE17## ##CMENUACTIVE18##"><A HREF="#"  class="drop">other files<b class="subcaret"></b></A>
++		<LI CLASS="##CMENUACTIVE9## ##CMENUACTIVE10## ##CMENUACTIVE11## ##CMENUACTIVE12## ##CMENUACTIVE13## ##CMENUACTIVE14## ##CMENUACTIVE15## ##CMENUACTIVE16## ##CMENUACTIVE17## ##CMENUACTIVE18## ##CMENUACTIVE27##"><A HREF="#"  class="drop">other files<b class="subcaret"></b></A>
+ 			<UL CLASS="dropdown_nav">
+ 				<LI CLASS="##CMENUACTIVE9##"><A HREF="files.html?file=oscam.services">oscam.services</A></LI>
+ 				<LI CLASS="##CMENUACTIVE10##"><A HREF="files.html?file=oscam.provid">oscam.provid</A></LI>
+@@ -22,6 +22,7 @@
+ ##VIEW_FILEMENUCSS##		<!-- CMENUACTIVE16 -->
+ ##TPLFILEMENUTWIN##		<!-- CMENUACTIVE17 -->
+ ##TPLFILEMENUCONSTCW##  	<!-- CMENUACTIVE18 -->
++##TPLFILEMENUSOFTCAMKEY##	<!-- CMENUACTIVE27 -->
  			</UL>
- ##TPLFILEMENUGBOX##	<!-- CMENUACTIVE19-26 -->
  		</LI>
---- webif/files/menu.html.orig	1970-01-01 01:00:00.000000000 +0100
-+++ webif/files/menu.html.orig	2016-12-29 22:01:37.000000000 +0100
-@@ -0,0 +1,28 @@
-+<DIV ID="subnav">
-+	<UL ID="nav">
-+		<LI CLASS="##CMENUACTIVE0##"><A HREF="files.html?file=oscam.version">oscam.version</A></LI>
-+		<LI CLASS="##CMENUACTIVE1##"><A HREF="files.html?file=oscam.conf">oscam.conf</A></LI>
-+		<LI CLASS="##CMENUACTIVE2##"><A HREF="files.html?file=oscam.user">oscam.user</A></LI>
-+		<LI CLASS="##CMENUACTIVE3##"><A HREF="files.html?file=oscam.server">oscam.server</A></LI>
-+		<LI CLASS="##CMENUACTIVE4##"><A HREF="files.html?file=##SRVID##">##SRVID##</A></LI>
-+##TPLFILEMENUDVBAPI##	<!-- CMENUACTIVE5 -->
-+##TPLFILEMENUANTICASC##	<!-- CMENUACTIVE6 -->
-+		<LI CLASS="##CMENUACTIVE7##"><A HREF="files.html?file=logfile">logfile</A></LI>
-+		<LI CLASS="##CMENUACTIVE8##"><A HREF="files.html?file=userfile">userfile</A></LI>
-+		<LI CLASS="##CMENUACTIVE9## ##CMENUACTIVE10## ##CMENUACTIVE11## ##CMENUACTIVE12## ##CMENUACTIVE13## ##CMENUACTIVE14## ##CMENUACTIVE15## ##CMENUACTIVE16## ##CMENUACTIVE17## ##CMENUACTIVE18##"><A HREF="#"  class="drop">other files<b class="subcaret"></b></A>
-+			<UL CLASS="dropdown_nav">
-+				<LI CLASS="##CMENUACTIVE9##"><A HREF="files.html?file=oscam.services">oscam.services</A></LI>
-+				<LI CLASS="##CMENUACTIVE10##"><A HREF="files.html?file=oscam.provid">oscam.provid</A></LI>
-+				<LI CLASS="##CMENUACTIVE11##"><A HREF="files.html?file=oscam.tiers">oscam.tiers</A></LI>
-+				<LI CLASS="##CMENUACTIVE12##"><A HREF="files.html?file=oscam.ratelimit">oscam.ratelimit</A></LI>
-+				<LI CLASS="##CMENUACTIVE13##"><A HREF="files.html?file=oscam.whitelist">oscam.whitelist</A></LI>
-+				<LI CLASS="##CMENUACTIVE14##"><A HREF="files.html?file=##SRVIDSUB##">##SRVIDSUB##</A></LI>
-+##TPLFILEMENUFAKECWS##	<!-- CMENUACTIVE15 -->
-+##VIEW_FILEMENUCSS##	<!-- CMENUACTIVE16 -->
-+##TPLFILEMENUTWIN##	<!-- CMENUACTIVE17 -->
-+##TPLFILEMENUCONSTCW##  <!-- CMENUACTIVE18 -->
-+			</UL>
-+##TPLFILEMENUGBOX##	<!-- CMENUACTIVE19-26 -->
-+		</LI>
-+	</UL>
-+</DIV>
---- webif/files/menu.html.rej	1970-01-01 01:00:00.000000000 +0100
-+++ webif/files/menu.html.rej	2016-12-29 22:02:39.935750391 +0100
-@@ -0,0 +1,11 @@
-+--- webif/files/menu.html	2016-12-29 20:47:51.000000000 +0100
-++++ webif/files/menu.html	2016-12-29 20:39:06.327785439 +0100
-+@@ -9,7 +9,7 @@
-+ ##TPLFILEMENUANTICASC##	<!-- CMENUACTIVE6 -->
-+ 		<LI CLASS="##CMENUACTIVE7##"><A HREF="files.html?file=logfile">logfile</A></LI>
-+ 		<LI CLASS="##CMENUACTIVE8##"><A HREF="files.html?file=userfile">userfile</A></LI>
-+-		<LI CLASS="##CMENUACTIVE9## ##CMENUACTIVE10## ##CMENUACTIVE11## ##CMENUACTIVE12## ##CMENUACTIVE13## ##CMENUACTIVE14## ##CMENUACTIVE15## ##CMENUACTIVE16## ##CMENUACTIVE17## ##CMENUACTIVE18##"><A HREF="#"  class="drop">other file<b class="subcaret"></b></A>
-++		<LI CLASS="##CMENUACTIVE9## ##CMENUACTIVE10## ##CMENUACTIVE11## ##CMENUACTIVE12## ##CMENUACTIVE13## ##CMENUACTIVE14## ##CMENUACTIVE15## ##CMENUACTIVE16## ##CMENUACTIVE17## ##CMENUACTIVE18## ##CMENUACTIVE19##"><A HREF="#"  class="drop">other file<b class="subcaret"></b></A>
-+ 			<UL CLASS="dropdown_nav">
-+ 				<LI CLASS="##CMENUACTIVE9##"><A HREF="files.html?file=oscam.services">oscam.services</A></LI>
-+ 				<LI CLASS="##CMENUACTIVE10##"><A HREF="files.html?file=oscam.provid">oscam.provid</A></LI>
---- webif/files/menu_softcamkey.html	1970-01-01 01:00:00.000000000 +0100
-+++ webif/files/menu_softcamkey.html	2016-12-29 22:05:36.115749159 +0100
+ 	</UL>
+Index: webif/files/menu_softcamkey.html
+===================================================================
+--- webif/files/menu_softcamkey.html	(Revision 0)
++++ webif/files/menu_softcamkey.html	(Arbeitskopie)
 @@ -0,0 +1 @@
-+			<LI CLASS="##CMENUACTIVE19##"><A HREF="files.html?file=SoftCam.Key">SoftCam.Key</A></LI>
---- webif/pages_index.txt	2016-12-29 22:01:37.000000000 +0100
-+++ webif/pages_index.txt	2016-12-29 22:05:36.115749159 +0100
++			<LI CLASS="##CMENUACTIVE27##"><A HREF="files.html?file=SoftCam.Key">SoftCam.Key</A></LI>
+Index: webif/pages_index.txt
+===================================================================
+--- webif/pages_index.txt	(Revision 11297)
++++ webif/pages_index.txt	(Arbeitskopie)
 @@ -80,11 +80,13 @@
  CONFIGMENUNEWCAMD             config/menu_newcamd.html                                    MODULE_NEWCAMD
  CONFIGMENURADEGAST            config/menu_radegast.html                                   MODULE_RADEGAST
@@ -10900,320 +11158,10 @@
  READERCONFIGCS378XBIT         readerconfig/readerconfig_cs378xbit.html                    MODULE_CAMD35_TCP
  READERCONFIGGBOXBIT           readerconfig/readerconfig_gboxbit.html                      MODULE_GBOX
  READERCONFIGGHTTPBIT          readerconfig/readerconfig_ghttpbit.html                     MODULE_GHTTP
---- webif/pages_index.txt.orig	1970-01-01 01:00:00.000000000 +0100
-+++ webif/pages_index.txt.orig	2016-12-29 22:01:37.000000000 +0100
-@@ -0,0 +1,309 @@
-+# This file contains index of the templates.
-+# The format is simple "TEMPLATE_NAME  FILENAME  DEPENDENCY1,DEPENDANCYx"
-+# Lines starting with # are ignorred
-+#  TEMPLATE_NAME - name of the template and also name of the file that
-+#                  contains the template
-+#  FILENAME      - The file that contains the template
-+#  DEPENDANCYx   - The config variable which is responsible for this template
-+
-+JSONCACHEEX                   api.json/cacheex.json                                       CS_CACHEEX
-+JSONCACHEEXBIT                api.json/cacheexbit.json                                    CS_CACHEEX
-+JSONENTITLEMENTS              api.json/entitlements.json
-+JSONENTITLEMENTBIT            api.json/entitlementbit.json
-+JSONFOOTER                    api.json/footer.json
-+JSONHEADER                    api.json/header.json
-+JSONREADER                    api.json/reader.json
-+JSONREADERBIT                 api.json/readerbit.json
-+JSONSTATUS                    api.json/status.json
-+JSONSTATUSBIT                 api.json/status_statusbits.json
-+JSONUSER                      api.json/user.json
-+JSONUSERBIT                   api.json/userbit.json
-+
-+APICCCAMCARDLIST              api.xml/cccamcardlist.xml                                   MODULE_CCCAM
-+APICCCAMCARDBIT               api.xml/cccamcardlist_cardlist.xml                          MODULE_CCCAM
-+APICCCAMCARDNODEBIT           api.xml/cccamcardlist_cardlist_nodelist.xml                 MODULE_CCCAM
-+APICCCAMCARDPROVIDERBIT       api.xml/cccamcardlist_cardlist_providerlist.xml             MODULE_CCCAM
-+APICONFIRMATION               api.xml/confirmation.xml
-+APIERROR                      api.xml/error.xml
-+APIFAILBAN                    api.xml/failban.xml
-+APIFAILBANBIT                 api.xml/failban_failbanrow.xml
-+APIFILE                       api.xml/file.xml
-+APIFOOTER                     api.xml/footer.xml
-+APIHEADER                     api.xml/header.xml
-+APIREADERS                    api.xml/readers.xml
-+APIREADERSBIT                 api.xml/readers_readerlist.xml
-+APIREADERSTATS                api.xml/readerstats.xml
-+APIREADERSTATSECMBIT          api.xml/readerstats_ecmstats.xml
-+APIREADERSTATSEMMBIT          api.xml/readerstats_emmstats.xml
-+APISTATUS                     api.xml/status.xml
-+APISTATUSBIT                  api.xml/status_statusbits.xml
-+APIUSERCONFIGLIST             api.xml/userconfiglist.xml
-+APIUSERCONFIGLISTBIT          api.xml/userconfiglist_userconfigs.xml
-+APIUSEREDIT                   api.xml/useredit.xml
-+
-+CACHEEXPAGE                   cacheex/cacheex.html                                        CS_CACHEEX
-+CACHEEXTABLEROW               cacheex/cacheex_tablerow.html                               CS_CACHEEX
-+
-+CONFIGANTICASC                config/anticasc.html                                        CS_ANTICASC
-+CONFIGCACHE                   config/cache.html
-+CONFIGCACHEEXCSP              config/cache_cacheexcsp.html                                CS_CACHEEX
-+CONFIGCWCYCLE                 config/cache_cwcycle.html                                   CW_CYCLE_CHECK
-+CONFIGCAMD33                  config/camd33.html                                          MODULE_CAMD33
-+CONFIGCAMD35                  config/camd35.html                                          MODULE_CAMD35
-+CONFIGCAMD35TCP               config/camd35tcp.html                                       MODULE_CAMD35_TCP
-+CONFIGCCCAM                   config/cccam.html                                           MODULE_CCCSHARE
-+CONFIGCCCAMCTRL               config/cccam_control.html                                   MODULE_CCCSHARE
-+CONFIGCONTENT                 config/config.html
-+CONFIGDVBAPI                  config/dvbapi.html                                          HAVE_DVBAPI
-+CONFIGGBOX                    config/gbox.html                                            MODULE_GBOX
-+CONFIGGLOBAL                  config/global.html
-+ENABLELEDBIT                  config/global_enableledbit.html                             LEDSUPPORT
-+LOCALCARDS                    config/global_localcards.html                               WITH_CARDREADER
-+SUPPRESSCMD08                 config/global_suppresscmd08.html                            MODULE_CAMD35,MODULE_CAMD35_TCP
-+GETBLOCKEMMAUPROVID           config/global_getblockemmauprovid.html                      MODULE_CAMD35,MODULE_CAMD35_TCP
-+UNLOCKPARENTAL                config/global_unlockparental.html                           READER_SECA,READER_VIACCESS
-+CONFIGLCD                     config/lcd.html                                             LCDSUPPORT
-+CONFIGLOADBALANCER            config/loadbalancer.html                                    WITH_LB
-+CONFIGLOADBALANCERCTRL        config/loadbalancer_control.html                            WITH_LB
-+CONFIGMENU                    config/menu.html
-+CONFIGMENUANTICASC            config/menu_anticasc.html                                   CS_ANTICASC
-+CONFIGMENUCAMD33              config/menu_camd33.html                                     MODULE_CAMD33
-+CONFIGMENUCAMD35              config/menu_camd35.html                                     MODULE_CAMD35
-+CONFIGMENUCAMD35TCP           config/menu_camd35tcp.html                                  MODULE_CAMD35_TCP
-+CONFIGMENUCCCAM               config/menu_cccam.html                                      MODULE_CCCSHARE
-+CMCAPTIONCWC                  config/menu_cmcaptioncwc.html                               CW_CYCLE_CHECK
-+CONFIGMENUDVBAPI              config/menu_dvbapi.html                                     HAVE_DVBAPI
-+CONFIGMENUGBOX                config/menu_gbox.html                                       MODULE_GBOX
-+CONFIGMENULCD                 config/menu_lcd.html                                        LCDSUPPORT
-+CONFIGMENULB                  config/menu_loadbalancer.html                               WITH_LB
-+CONFIGMENUMONITOR             config/menu_monitor.html                                    MODULE_MONITOR
-+CONFIGMENUNEWCAMD             config/menu_newcamd.html                                    MODULE_NEWCAMD
-+CONFIGMENURADEGAST            config/menu_radegast.html                                   MODULE_RADEGAST
-+CONFIGMENUSCAM                config/menu_scam.html                                       MODULE_SCAM
-+CONFIGMENUSERIAL              config/menu_serial.html                                     MODULE_SERIAL
-+CONFIGMONITOR                 config/monitor.html                                         MODULE_MONITOR
-+CONFIGNEWCAMD                 config/newcamd.html                                         MODULE_NEWCAMD
-+CONFIGRADEGAST                config/radegast.html                                        MODULE_RADEGAST
-+CONFIGSCAM                    config/scam.html                                            MODULE_SCAM
-+CONFIGSERIAL                  config/serial.html                                          MODULE_SERIAL
-+CONFIGSERIALDEVICEBIT         config/serial_devices.html                                  MODULE_SERIAL
-+CONFIGWEBIF                   config/webif.html
-+HTTPSSL                       config/webif_httpssl.html                                   WITH_SSL
-+SHOWCACHEEXINFO               config/webif_showcacheexinfo.html                           CS_CACHEEX
-+CONFIGWEBIFJQUERYBIT          config/webif_show_jquery.html
-+
-+ASKEMM                        emm/emm.html
-+
-+EMM_RUNNING                   emm_running/emm_running.html
-+
-+ENTITLEMENTS                  entitlements/entitlements.html                              WITH_CARDREADER,MODULE_CCCAM
-+ENTITLEMENTBIT                entitlements/entitlements_bit.html                          WITH_CARDREADER
-+ENTITLEMENTBITNDS             entitlements/entitlements_bit_nds.html                      READER_VIDEOGUARD
-+ENTITLEMENTCCCAMBIT           entitlements/entitlements_cccambit.html                     MODULE_CCCAM
-+ENTITLEMENTCCCAMENTRYBIT      entitlements/entitlements_cccambit_statsentry.html          MODULE_CCCAM
-+ENTITLEMENTGENERICBIT         entitlements/entitlements_genericbit.html                   WITH_CARDREADER
-+ENTITLEMENTITEMBIT            entitlements/entitlements_itembit.html                      WITH_CARDREADER
-+
-+FAILBAN                       failban/failban.html
-+FAILBANBIT                    failban/failban_failbanrow.html
-+
-+FILE                          files/file.html
-+FILEMENUCSS                   files/file_edit_css.html
-+FILTERFORM                    files/file_filterform.html
-+WRITEPROTECTION               files/file_writeprotection.html
-+FILEMENU                      files/menu.html
-+FILEMENUANTICASC              files/menu_anticasc.html                                    CS_ANTICASC
-+FILEMENUCONSTCW               files/menu_constantcw.html                                  MODULE_CONSTCW
-+FILEMENUDVBAPI                files/menu_dvbapi.html                                      HAVE_DVBAPI
-+FILEMENUFAKECWS               files/menu_fakecws.html                                     CS_CACHEEX
-+FILEMENUGBOX                  files/menu_gbox.html	                                  MODULE_GBOX
-+FILEMENUTWIN                  files/menu_twin.html                                        MODULE_SERIAL
-+
-+AUTOCONF                      ghttp/autoconf.html                                         MODULE_GHTTP
-+PREAUTOCONF                   ghttp/pre_autoconf.html                                     MODULE_GHTTP
-+
-+GRAPH                         graph/graph.svg
-+
-+ICMAI                         images/favicon.ico
-+ICARRL                        images/ICARRL.svg                                           CS_CACHEEX
-+ICARRR                        images/ICARRR.svg                                           CS_CACHEEX
-+ICDEL                         images/ICDEL.svg
-+ICDIS                         images/ICDIS.svg
-+ICEDI                         images/ICEDI.svg
-+ICEMM                         images/ICEMM.svg
-+ICENA                         images/ICENA.svg
-+ICENT                         images/ICENT.svg
-+ICHID                         images/ICHID.svg
-+ICKIL                         images/ICKIL.svg
-+LOGOBITSVG                    images/ICMLOGO.svg
-+ICREF                         images/ICREF.svg
-+ICRES                         images/ICRES.svg
-+ICSPAC                        images/ICSPAC.gif
-+ICSTA                         images/ICSTA.svg
-+ICSTART                       images/ICSTART.svg
-+ICSTOP                        images/ICSTOP.svg
-+
-+BODY                          include/body.html
-+CCENTITLEMENTS                include/cccamentitlements.html                              MODULE_CCCAM
-+CCENTITLETOOLTIP              include/cccamentitletooltip.html                            MODULE_CCCAM
-+CSS                           include/css.css
-+FOOTER                        include/footer.html
-+FOUNDENTITLEMENTS             include/foundentitlements.html
-+HEADER                        include/header.html
-+HEADERSHORT                   include/header_short.html
-+JQUERY                        include/jquery.js                                           WEBIF_JQUERY
-+JSCRIPT                       include/jscript.js
-+LOGOBIT                       include/logobit.html
-+LOGOBITIMG                    include/logobit_img.html
-+MENU                          include/menu.html
-+CACHEEXMENUITEM               include/menu_cacheexmenuitem.html                           CS_CACHEEX
-+MESSAGE                       include/message.html
-+MESSAGEBIT                    include/message_bit.html
-+NOENTITLEMENTS                include/noentitlements.html
-+POLL                          include/poll.html
-+POLLINGSET                    include/pollingset.html
-+PROTOCCCAMPIC                 include/protocccampic.html                                  MODULE_CCCAM
-+PROTONEWCAMDPIC               include/protonewcamdpic.html                                MODULE_NEWCAMD
-+PROTOOTHERPIC                 include/protootherpic.html
-+REFRESH                       include/refresh.html
-+
-+CLEARLOG                      logmenu/log_clearlog.html
-+CLEARUSERLOG                  logmenu/log_clearuserlog.html
-+LOGMENUDISABLELOG             logmenu/log_disablelogmenu.html
-+LOGMENUFILTERFORM             logmenu/log_filterform.html
-+LOGMENUONOFF                  logmenu/log_logmenuonoff.html
-+
-+LOGPAGE                       logpage/logpage.html                                        WEBIF_LIVELOG
-+LOGMENU                       logpage/logpage_menu.html                                   WEBIF_LIVELOG
-+LOGDEBUGMENU                  logpage/logpage_debugmenu.html                              WEBIF_LIVELOG
-+LOGSIZEMENU                   logpage/logpage_sizemenu.html                               WEBIF_LIVELOG
-+
-+READERCONFIG                  readerconfig/readerconfig.html
-+READEREDITCACHEEXBIT          readerconfig/readerconfig_cacheexbit.html                   CS_CACHEEX
-+READERCONFIGCAMD35BIT         readerconfig/readerconfig_camd35bit.html                    MODULE_CAMD35
-+READERCONFIGCCCAMBIT          readerconfig/readerconfig_cccambit.html                     MODULE_CCCAM
-+READERCONFIGCS378XBIT         readerconfig/readerconfig_cs378xbit.html                    MODULE_CAMD35_TCP
-+READERCONFIGGBOXBIT           readerconfig/readerconfig_gboxbit.html                      MODULE_GBOX
-+READERCONFIGGHTTPBIT          readerconfig/readerconfig_ghttpbit.html                     MODULE_GHTTP
-+READERCONFIGHOPBIT            readerconfig/readerconfig_hopbit.html                       MODULE_CCCAM
-+READERCONFIGSTDHWREADERBIT    readerconfig/readerconfig_hwreader.html                     WITH_CARDREADER
-+READERCONFIGBOXKEY            readerconfig/readerconfig_hwreader_boxkey.html              READER_NAGRA,READER_IRDETO,READER_SECA,READER_VIACCESS
-+READERCONFIGIRDETO            readerconfig/readerconfig_hwreader_irdeto.html              READER_IRDETO
-+READERCONFIGNAGRA             readerconfig/readerconfig_hwreader_nagra.html               READER_NAGRA
-+READERCONFIGNANO              readerconfig/readerconfig_hwreader_nano.html                WITH_CARDREADER
-+READERPINCODE                 readerconfig/readerconfig_hwreader_pincode.html             READER_CONAX,READER_CRYPTOWORKS,READER_VIACCESS,READER_SECA
-+READERCONFIGRSAKEY            readerconfig/readerconfig_hwreader_rsakey.html              READER_NAGRA,READER_IRDETO,READER_CONAX
-+READERCONFIGDESKEY            readerconfig/readerconfig_hwreader_deskey.html              READER_VIACCESS,READER_DRE
-+READERCONFIGSC8IN1            readerconfig/readerconfig_hwreader_sc8in1.html              CARDREADER_SC8IN1
-+READERCONFIGSMARGO            readerconfig/readerconfig_hwreader_smargo.html              CARDREADER_SMARGO,CARDREADER_PHOENIX
-+READERCONFIGVIACCESS          readerconfig/readerconfig_hwreader_viaccess.html            READER_VIACCESS
-+READERCONFIGDRE               readerconfig/readerconfig_hwreader_dre.html                 READER_DRE
-+READERCONFIGVIDEOGUARD        readerconfig/readerconfig_hwreader_videoguard.html          READER_VIDEOGUARD
-+READERCONFIGLBWEIGHT          readerconfig/readerconfig_lbweight.html                     WITH_LB
-+READERCONFIGNCD525BIT         readerconfig/readerconfig_ncd525bit.html                    MODULE_NEWCAMD
-+READERCONFIGNCD524BIT         readerconfig/readerconfig_ncd524bit.html                    MODULE_NEWCAMD
-+READERCONFIGRADEGASTBIT       readerconfig/readerconfig_radegastbit.html                  MODULE_RADEGAST
-+READERCONFIGSCAMBIT           readerconfig/readerconfig_scambit.html                      MODULE_SCAM
-+READERCONFIGSID               readerconfig/readerconfig_sid.html
-+READERCONFIGSIDLBOKBIT        readerconfig/readerconfig_sidlbokbit.html
-+READERCONFIGSIDNOBIT          readerconfig/readerconfig_sidnobit.html
-+READERCONFIGSIDOKBIT          readerconfig/readerconfig_sidokbit.html
-+
-+READERS                       readers/readers.html
-+READERCTYPBIT                 readers/readerctypbit.html
-+READERCTYPNOICON              readers/readerctypnoicon.html
-+READERLABEL                   readers/readerlabel.html
-+READERNAMEBIT                 readers/readernamebit.html
-+READERNOICON                  readers/readernoicon.html
-+READERLBBIT                   readers/readers_lblweightbit.html                           WITH_LB
-+READERLBWD                    readers/readers_lblweightd.html                             WITH_LB
-+READERLBWU                    readers/readers_lblweightu.html                             WITH_LB
-+READERSBIT                    readers/readers_readerlist.html
-+READERENTITLEBIT              readers/readers_readerlist_entitlement.html
-+READERLBSTAT                  readers/readers_readerlist_lbstat.html                      WITH_LB
-+READERREFRESHBIT              readers/readers_readerlist_refresh.html
-+READERWRITEEMMBIT             readers/readers_readerlist_writeemm.html
-+
-+READERSTATS                   readerstats/readerstats.html                                WITH_LB
-+READERSTATSNOSTATS            readerstats/readerstats_nostats.html                        WITH_LB
-+READERSTATSBIT                readerstats/readerstats_statsbit.html                       WITH_LB
-+READERSTATSROWNOTFOUNDBIT     readerstats/readerstatsnotfound.html                        WITH_LB
-+READERSTATSROWBIT             readerstats/readerstatsrowbit.html                          WITH_LB
-+READERSTATSROWTIMEOUTBIT      readerstats/readerstatstimeoutbit.html                      WITH_LB
-+READERSTATSROWINVALIDBIT      readerstats/readerstatsinvalid.html                         WITH_LB
-+
-+SAVETEMPLATES                 savetemplates/savetemplates.html
-+
-+SCANUSB                       scanusb/scanusb.html
-+SCANUSBBIT                    scanusb/scanusb_usbbit.html
-+
-+SCRIPT                        script/script.html
-+
-+SERVICECONFIGLIST             services/services.html
-+SERVICECONFIGLISTBIT          services/services_servicetabs.html
-+SERVICECONFIGSIDBIT           services/services_servicetabs_sidlist.html
-+
-+SERVICEEDIT                   services_edit/services_edit.html
-+
-+PRESHUTDOWN                   shutdown/pre_shutdown.html
-+SHUTDOWN                      shutdown/shutdown.html
-+
-+STATUS                        status/status.html
-+CACHEEXINFOBIT                status/status_cacheexinfo.html                              CS_CACHEEX
-+CLIENTHEADLINE                status/status_cheadline.html
-+CLIENTHEADLINEADD             status/status_cheadlineadd.html
-+CLIENTHEADLINEBIT             status/status_clientheadlinebit.html
-+CLIENTSTATUSBIT               status/status_clientstatusbit.html
-+CLIENTCURRENTCHANNEL          status/status_currentchannel.html
-+CLIENTCURRENTCHANNELBIT       status/status_currentchannelbit.html
-+CLIENTCURRENTCHANNELPIC       status/status_currentchannelpic.html
-+STATUSHEADLINE                status/status_headline.html
-+STATUSHBUTTON                 status/status_hidebutton.html
-+STATUSKBUTTON                 status/status_killbutton.html
-+CLIENTLBLVALUEBIT             status/status_lblvaluereaderbit.html                        WITH_LB
-+CLIENTLBLVALUERP              status/status_lbvaluereaderproxy.html                       WITH_LB
-+LOGHISTORYBIT                 status/status_loghistory.html
-+CLIENTMHEADLINE               status/status_mheadline.html                                MODULE_MONITOR
-+CLIENTPHEADLINE               status/status_pheadline.html
-+CLIENTPHEADLINEADD            status/status_pheadlineadd.html
-+SREADER                       status/status_reader.html
-+SREADERICON                   status/status_readericon.html
-+STATUSRBUTTON                 status/status_restartbutton.html
-+CLIENTRHEADLINE               status/status_rheadline.html
-+CLIENTRHEADLINEADD            status/status_rheadlineadd.html
-+DEBUGSELECT                   status/status_sdebug.html                                   WITH_DEBUG
-+CLIENTSHEADLINE               status/status_sheadline.html
-+SYSTEMINFOBIT                 status/status_systeminfo.html
-+SUSER                         status/status_user.html
-+SUSERICON                     status/status_usericon.html
-+USERINFOBIT                   status/status_userinfo.html
-+READERINFOBIT                 status/status_readerinfo.html
-+
-+TOUCH_CSS                     touch/css.css                                               TOUCH
-+TOUCH_JSCRIPT                 touch/jscript.js                                            TOUCH
-+TOUCH_STATUS                  touch/status.html                                           TOUCH
-+
-+USEREDIT                      user_edit/user_edit.html
-+USEREDITANTICASC              user_edit/user_edit_anticasc.html                           CS_ANTICASC
-+USEREDITCACHEEXBIT            user_edit/user_edit_cacheexbit.html                         CS_CACHEEX
-+USEREDITCWCYCLE               user_edit/user_edit_cwcycle.html                            CW_CYCLE_CHECK
-+USEREDITCCCAM                 user_edit/user_edit_cccam.html                              MODULE_CCCAM
-+USEREDITMONLEVEL              user_edit/user_edit_monlevel.html                           MODULE_MONITOR
-+USEREDITSID                   user_edit/user_edit_sid.html
-+USEREDITSIDNOBIT              user_edit/user_edit_sidnobit.html
-+USEREDITSIDOKBIT              user_edit/user_edit_sidokbit.html
-+
-+USERCONFIGLIST                userconfig/userconfig.html
-+USERANTICASC                  userconfig/userconfig_anticascbit.html                      CS_ANTICASC
-+CWANTICASCTHV                 userconfig/userconfig_cwanticascthv.html                    CS_ANTICASC
-+USERCWCYCLE                   userconfig/userconfig_cwcyclebit.html                       CW_CYCLE_CHECK
-+CWCYCLETHV                    userconfig/userconfig_cwcyclethv.html                       CW_CYCLE_CHECK
-+USERCONFIGLISTBIT             userconfig/userconfig_entry.html
-+CWANTICASCTBV                 userconfig/userconfig_entry_cwanticasctbv.html              CS_ANTICASC
-+CWCYCLETBV                    userconfig/userconfig_entry_cwcycletbv.html                 CW_CYCLE_CHECK
-+USERCONFIGLASTCHANEL          userconfig/userconfig_lastchannelicon.html
-+ADDNEWUSER                    userconfig/userconfig_newuserform.html
-+CLIENTCOUNTNOTIFIERBIT        userconfig/userconfig_notify.html
-+USERICON                      userconfig/userconfig_usericon.html
-+USERLABEL                     userconfig/userconfig_userlabel.html
-+USERNOICON                    userconfig/userconfig_usernoicon.html
---- webif/readerconfig/readerconfig_emubit.html	1970-01-01 01:00:00.000000000 +0100
-+++ webif/readerconfig/readerconfig_emubit.html	2016-12-29 22:05:36.115749159 +0100
+Index: webif/readerconfig/readerconfig_emubit.html
+===================================================================
+--- webif/readerconfig/readerconfig_emubit.html	(Revision 0)
++++ webif/readerconfig/readerconfig_emubit.html	(Arbeitskopie)
 @@ -0,0 +1,5 @@
 +			<TR><TD><A>AU providers:</A></TD><TD><textarea name="emu_auproviders" rows="3" class="bt">##EMUAUPROVIDERS##</textarea></TD></TR>
 +			<TR><TD><A>DRE extee36:</A></TD><TD><input name="extee36" type="text" maxlength="150" value="##EXTEE36##"></TD></TR>
