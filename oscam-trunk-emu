@@ -11727,12 +11727,6 @@ BinÃ¤rdateien oscam-svn/.svn/wc.db und oscam-svn-p/.svn/wc.db sind verschieden
  			<TD>
  				<select name="extended_cw_api">
  					<option value="0" ##EXTENDEDCWAPISELECTED0##>0 - none (disabled)</option>
-@@ -61,4 +61,4 @@
- 					<option value="2" ##EXTENDEDCWAPISELECTED2##>2 - OE2.0</option>
- 				</select>
- 			</TD>
--		</TR> -->			
-+		</TR>		
 --- webif/config/menu.html	2017-01-02 11:26:37.000000000 +0100
 +++ webif/config/menu.html	2017-01-02 11:35:58.000000000 +0100
 @@ -16,6 +16,7 @@
