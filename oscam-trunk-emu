@@ -11737,27 +11737,6 @@
  			<TD>
  				<select name="extended_cw_api">
  					<option value="0" ##EXTENDEDCWAPISELECTED0##>0 - none (disabled)</option>
---- webif/config/menu.html	2017-01-03 12:29:00.000000000 +0100
-+++ webif/config/menu.html	2017-01-03 12:26:29.000000000 +0100
-@@ -3,7 +3,7 @@
- 			<LI CLASS="##CMENUACTIVE0##"><A HREF="config.html?part=global">Global</A></LI>
- ##TPLCONFIGMENUANTICASC##	<!-- CMENUACTIVE1 -->
- 			<LI CLASS="##CMENUACTIVE2##"><A HREF="config.html?part=cache">Cache##TPLCMCAPTIONCWC##</A></LI>
--##TPLCONFIGMENULB##			<!-- CMENUACTIVE3 -->
-+##TPLCONFIGMENULB##		<!-- CMENUACTIVE3 -->
- ##TPLCONFIGMENUCAMD33##		<!-- CMENUACTIVE4 -->
- ##TPLCONFIGMENUCAMD35##		<!-- CMENUACTIVE5 -->
- ##TPLCONFIGMENUCAMD35TCP##	<!-- CMENUACTIVE6 -->
-@@ -16,6 +16,8 @@
- ##TPLCONFIGMENUDVBAPI##		<!-- CMENUACTIVE13 -->
- ##TPLCONFIGMENULCD##		<!-- CMENUACTIVE14 -->
- ##TPLCONFIGMENUMONITOR##	<!-- CMENUACTIVE15 -->
-+##TPLCONFIGMENUSTREAMRELAY##	<!-- CMENUACTIVE17 -->
- 			<LI CLASS="##CMENUACTIVE16##"><A HREF="config.html?part=webif">WebIf</A></LI>
- 	</UL>
--</DIV>
-+</DIV>
-+
 --- webif/config/menu_streamrelay.html	1970-01-01 01:00:00.000000000 +0100
 +++ webif/config/menu_streamrelay.html	2017-01-03 12:21:16.000000000 +0100
 @@ -0,0 +1 @@
@@ -11813,16 +11792,6 @@
 +++ webif/files/menu_softcamkey.html	2017-01-03 12:21:16.000000000 +0100
 @@ -0,0 +1 @@
 +			<LI CLASS="##CMENUACTIVE27##"><A HREF="files.html?file=SoftCam.Key">SoftCam.Key</A></LI>
---- webif/is_defined.txt	2017-01-03 12:29:19.000000000 +0100
-+++ webif/is_defined.txt	2017-01-03 12:21:16.000000000 +0100
-@@ -12,6 +12,7 @@
- CS_CACHEEX
- CW_CYCLE_CHECK
- CLOCKFIX
-+WITH_EMU
- MODULE_CAMD35
- MODULE_CAMD35_TCP
- MODULE_NEWCAMD
 --- webif/pages_index.txt	2017-01-03 12:28:58.000000000 +0100
 +++ webif/pages_index.txt	2017-01-03 12:21:16.000000000 +0100
 @@ -80,11 +80,13 @@
@@ -11863,3 +11832,13 @@
 +			<TR><TD><A>DRE extee56:</A></TD><TD><input name="extee56" type="text" maxlength="150" value="##EXTEE56##"></TD></TR>
 +			<TR><TD><A>DRE center force group:</A></TD><TD><input name="dre36_force_group" class="medium" type="text" maxlength="2" value="##DRE36FORCEGROUP##"></TD></TR>
 +			<TR><TD><A>DRE siberia force group:</A></TD><TD><input name="dre56_force_group" class="medium" type="text" maxlength="2" value="##DRE56FORCEGROUP##"></TD></TR>
+--- webif/config/menu.html	2017-01-03 12:46:25.000000000 +0100
++++ webif/config/menu.html	2017-01-03 12:46:11.000000000 +0100
+@@ -16,6 +16,7 @@
+ ##TPLCONFIGMENUDVBAPI##	<!-- CMENUACTIVE13 -->
+ ##TPLCONFIGMENULCD##		<!-- CMENUACTIVE14 -->
+ ##TPLCONFIGMENUMONITOR##	<!-- CMENUACTIVE15 -->
++##TPLCONFIGMENUSTREAMRELAY##	<!-- CMENUACTIVE17 -->
+ 			<LI CLASS="##CMENUACTIVE16##"><A HREF="config.html?part=webif">WebIf</A></LI>
+ 	</UL>
+ </DIV>
