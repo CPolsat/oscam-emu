@@ -10991,7 +10991,7 @@
  		<LI CLASS="##CMENUACTIVE8##"><A HREF="files.html?file=userfile">userfile</A></LI>
  ##TPLFILEMENUGBOX##		<!-- CMENUACTIVE19-26 -->
 -		<LI CLASS="##CMENUACTIVE9## ##CMENUACTIVE10## ##CMENUACTIVE11## ##CMENUACTIVE12## ##CMENUACTIVE13## ##CMENUACTIVE14## ##CMENUACTIVE15## ##CMENUACTIVE16## ##CMENUACTIVE17## ##CMENUACTIVE18##"><A HREF="#"  class="drop">other files<b class="subcaret"></b></A>
-+		<LI CLASS="##CMENUACTIVE9## ##CMENUACTIVE10## ##CMENUACTIVE11## ##CMENUACTIVE12## ##CMENUACTIVE13## ##CMENUACTIVE14## ##CMENUACTIVE15## ##CMENUACTIVE16## ##CMENUACTIVE17## ##CMENUACTIVE18## ##CMENUACTIVE27##"><A HREF="#"  class="drop">other files<b class="subcaret"></b></A>      
++		<LI CLASS="##CMENUACTIVE9## ##CMENUACTIVE10## ##CMENUACTIVE11## ##CMENUACTIVE12## ##CMENUACTIVE13## ##CMENUACTIVE14## ##CMENUACTIVE15## ##CMENUACTIVE16## ##CMENUACTIVE17## ##CMENUACTIVE18## ##CMENUACTIVE27##"><A HREF="#"  class="drop">other files<b class="subcaret"></b></A>������
  			<UL CLASS="dropdown_nav">
  				<LI CLASS="##CMENUACTIVE9##"><A HREF="files.html?file=oscam.services">oscam.services</A></LI>
  				<LI CLASS="##CMENUACTIVE10##"><A HREF="files.html?file=oscam.provid">oscam.provid</A></LI>
@@ -11006,7 +11006,7 @@
 --- webif/files/menu_softcamkey.html	1970-01-01 01:00:00.000000000 +0100
 +++ webif/files/menu_softcamkey.html	2017-02-08 18:19:25.000000000 +0100
 @@ -0,0 +1 @@
-+			<LI CLASS="##CMENUACTIVE27##"><A HREF="files.html?file=SoftCam.Key">SoftCam.Key</A></LI>
++			<LI CLASS="##CMENUACTIVE29##"><A HREF="files.html?file=SoftCam.Key">SoftCam.Key</A></LI>
 --- webif/pages_index.txt	2017-02-08 18:07:14.000000000 +0100
 +++ webif/pages_index.txt	2017-02-08 18:19:25.000000000 +0100
 @@ -80,11 +80,13 @@
