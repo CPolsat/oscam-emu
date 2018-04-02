@@ -101,32 +101,6 @@
  #define WEBIF 1
  #define WEBIF_LIVELOG 1
  #define WEBIF_JQUERY 1
-@@ -19,22 +20,22 @@
- //#define CW_CYCLE_CHECK 1
- //#define LCDSUPPORT 1
- //#define LEDSUPPORT 1
--//#define IPV6SUPPORT 1
-+#define IPV6SUPPORT 1
- //#define MODULE_MONITOR 1
- 
- //#define MODULE_CAMD33 1
- #define MODULE_CAMD35 1
- #define MODULE_CAMD35_TCP 1
--//#define MODULE_NEWCAMD 1
-+#define MODULE_NEWCAMD 1
- #define MODULE_CCCAM 1
- //#define MODULE_CCCSHARE 1
--//#define MODULE_GBOX 1
-+#define MODULE_GBOX 1
- //#define MODULE_RADEGAST 1
- //#define MODULE_SERIAL 1
- //#define MODULE_CONSTCW 1
- //#define MODULE_PANDORA 1
- //#define MODULE_GHTTP 1
--//#define MODULE_SCAM 1
-+#define MODULE_SCAM 1
- 
- #define WITH_CARDREADER 1
  
 --- config.sh	2018-04-01 15:43:10.000000000 +0200
 +++ config.sh	2018-03-31 14:51:00.000000000 +0200
